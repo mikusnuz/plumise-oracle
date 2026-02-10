@@ -7,12 +7,6 @@ services:
       dockerfile: Dockerfile
     container_name: plumise-oracle
     restart: unless-stopped
+    network_mode: host
     env_file:
       - .env
-    networks:
-      - plumise
-
-networks:
-  plumise:
-    name: plumise
-    external: true
