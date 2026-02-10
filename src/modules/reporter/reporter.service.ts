@@ -34,7 +34,7 @@ export class ReporterService {
         this.lastReportBlock = currentBlock;
       }
     } catch (error) {
-      this.logger.error('Error checking report interval', error.stack);
+      this.logger.error('Error checking report interval', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -58,7 +58,7 @@ export class ReporterService {
       this.logger.log('Contribution reporting completed');
       this.scorerService.resetEpochData();
     } catch (error) {
-      this.logger.error('Error reporting contributions', error.stack);
+      this.logger.error('Error reporting contributions', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -85,7 +85,7 @@ export class ReporterService {
     } catch (error) {
       this.logger.error(
         `Failed to report contribution for ${agentAddress}`,
-        error.stack,
+        process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error',
       );
     }
   }

@@ -31,7 +31,7 @@ export class DistributorService {
         this.lastCheckedEpoch = currentEpoch;
       }
     } catch (error) {
-      this.logger.error('Error checking epoch distribution', error.stack);
+      this.logger.error('Error checking epoch distribution', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -59,7 +59,7 @@ export class DistributorService {
         gasUsed: receipt.gasUsed.toString(),
       });
     } catch (error) {
-      this.logger.error(`Failed to distribute rewards for epoch ${epoch}`, error.stack);
+      this.logger.error(`Failed to distribute rewards for epoch ${epoch}`, process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
   }
 }

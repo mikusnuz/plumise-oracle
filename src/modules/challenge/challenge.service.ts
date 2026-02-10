@@ -33,7 +33,7 @@ export class ChallengeService implements OnModuleInit {
       await this.listenForChallengeEvents();
       await this.checkCurrentChallenge();
     } catch (error) {
-      this.logger.error('Failed to initialize challenge service', error.stack);
+      this.logger.error('Failed to initialize challenge service', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -87,7 +87,7 @@ export class ChallengeService implements OnModuleInit {
         await this.createNewChallenge();
       }
     } catch (error) {
-      this.logger.error('Error checking challenge', error.stack);
+      this.logger.error('Error checking challenge', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -106,7 +106,7 @@ export class ChallengeService implements OnModuleInit {
         this.currentChallenge = null;
       }
     } catch (error) {
-      this.logger.error('Error checking current challenge', error.stack);
+      this.logger.error('Error checking current challenge', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -131,7 +131,7 @@ export class ChallengeService implements OnModuleInit {
 
       await this.checkCurrentChallenge();
     } catch (error) {
-      this.logger.error('Failed to create challenge', error.stack);
+      this.logger.error('Failed to create challenge', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
   }
 

@@ -31,7 +31,7 @@ export class MonitorService {
 
       this.detectInactiveAgents();
     } catch (error) {
-      this.logger.error('Error monitoring agents', error.stack);
+      this.logger.error('Error monitoring agents', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -56,7 +56,7 @@ export class MonitorService {
         this.agents.set(address, agentInfo);
       }
     } catch (error) {
-      this.logger.error(`Error updating agent info for ${address}`, error.stack);
+      this.logger.error(`Error updating agent info for ${address}`, process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
   }
 

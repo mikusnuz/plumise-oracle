@@ -24,7 +24,11 @@ async function bootstrap() {
       await app.close();
     });
   } catch (error) {
-    logger.error('Failed to start oracle service', error.stack);
+    const isDev = process.env.NODE_ENV !== 'production';
+    logger.error(
+      'Failed to start oracle service',
+      isDev && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error'
+    );
     process.exit(1);
   }
 }

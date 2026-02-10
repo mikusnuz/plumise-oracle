@@ -60,7 +60,11 @@ export class ChainService implements OnModuleInit {
       const currentEpoch = await this.rewardPool.getCurrentEpoch();
       this.logger.log(`Current epoch: ${currentEpoch}`);
     } catch (error) {
-      this.logger.error('Failed to initialize chain service', error.stack);
+      const isDev = process.env.NODE_ENV !== 'production';
+      this.logger.error(
+        'Failed to initialize chain service',
+        isDev && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error'
+      );
       throw error;
     }
   }
