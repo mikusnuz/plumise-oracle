@@ -57,9 +57,16 @@ export class AppModule implements OnModuleInit {
     @Inject(SyncService) private syncService: SyncService,
   ) {}
 
-  onModuleInit() {
+  async onModuleInit() {
     this.monitorService.syncService = this.syncService;
     this.challengeService.setSyncService(this.syncService);
     this.distributorService.setSyncService(this.syncService);
+
+    // Run initial sync after all modules are initialized (ChainService ready)
+    try {
+      await this.syncService.initialSync();
+    } catch (error) {
+      // Non-fatal: monitor cycle will populate data over time
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Agent, Challenge, Epoch, Contribution, NetworkStats } from '../../entities';
@@ -6,7 +6,7 @@ import { ChainService } from '../chain/chain.service';
 import { Logger } from '../../utils/logger';
 
 @Injectable()
-export class SyncService implements OnModuleInit {
+export class SyncService {
   private logger = new Logger('SyncService');
 
   constructor(
@@ -23,17 +23,7 @@ export class SyncService implements OnModuleInit {
     private chainService: ChainService,
   ) {}
 
-  async onModuleInit() {
-    this.logger.log('Starting initial sync...');
-    try {
-      await this.initialSync();
-      this.logger.log('Initial sync completed');
-    } catch (error) {
-      this.logger.error('Initial sync failed', error instanceof Error ? error.message : 'Unknown error');
-    }
-  }
-
-  private async initialSync() {
+  async initialSync() {
     if (!this.chainService.agentRegistry || !this.chainService.rewardPool) {
       this.logger.warn('Chain services not ready, skipping initial sync');
       return;
