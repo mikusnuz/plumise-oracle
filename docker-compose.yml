@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  plumise-oracle:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: plumise-oracle
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - plumise
+
+networks:
+  plumise:
+    name: plumise
+    external: true

@@ -47,6 +47,32 @@
   },
   {
     "type": "function",
+    "name": "MAX_LATENCY_INV",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_PROCESSED_TOKENS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_RESPONSE_SCORE",
     "inputs": [],
     "outputs": [
@@ -132,6 +158,16 @@
       },
       {
         "name": "lastUpdated",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "processedTokens",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "avgLatencyInv",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -273,6 +309,16 @@
         "name": "lastUpdated",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "processedTokens",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "avgLatencyInv",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -348,6 +394,16 @@
           },
           {
             "name": "lastUpdated",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "processedTokens",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "avgLatencyInv",
             "type": "uint256",
             "internalType": "uint256"
           }
@@ -428,6 +484,16 @@
             "name": "lastUpdated",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "processedTokens",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "avgLatencyInv",
+            "type": "uint256",
+            "internalType": "uint256"
           }
         ]
       }
@@ -456,6 +522,19 @@
   {
     "type": "function",
     "name": "lastTrackedBalance",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "latencyWeight",
     "inputs": [],
     "outputs": [
       {
@@ -548,16 +627,41 @@
   },
   {
     "type": "function",
-    "name": "responseWeight",
-    "inputs": [],
-    "outputs": [
+    "name": "reportContribution",
+    "inputs": [
       {
-        "name": "",
+        "name": "agent",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "taskCount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "uptimeSeconds",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "responseScore",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "processedTokens",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "avgLatencyInv",
         "type": "uint256",
         "internalType": "uint256"
       }
     ],
-    "stateMutability": "view"
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -603,6 +707,11 @@
     "name": "setRewardFormula",
     "inputs": [
       {
+        "name": "_tokenWeight",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
         "name": "_taskWeight",
         "type": "uint256",
         "internalType": "uint256"
@@ -613,7 +722,7 @@
         "internalType": "uint256"
       },
       {
-        "name": "_responseWeight",
+        "name": "_latencyWeight",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -631,6 +740,19 @@
   {
     "type": "function",
     "name": "taskWeight",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "tokenWeight",
     "inputs": [],
     "outputs": [
       {
@@ -696,6 +818,18 @@
         "internalType": "uint256"
       },
       {
+        "name": "processedTokens",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "avgLatencyInv",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
         "name": "epoch",
         "type": "uint256",
         "indexed": false,
@@ -722,6 +856,12 @@
     "name": "FormulaUpdated",
     "inputs": [
       {
+        "name": "tokenWeight",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
         "name": "taskWeight",
         "type": "uint256",
         "indexed": false,
@@ -734,7 +874,7 @@
         "internalType": "uint256"
       },
       {
-        "name": "responseWeight",
+        "name": "latencyWeight",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
