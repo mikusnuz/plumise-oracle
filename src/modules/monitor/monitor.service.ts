@@ -9,12 +9,17 @@ interface AgentInfo {
   lastHeartbeat: number;
   isActive: boolean;
   registeredAt: number;
+  nodeId?: string;
+  metadata?: string;
+  status?: number;
+  stake?: bigint;
 }
 
 @Injectable()
 export class MonitorService {
   private logger = new Logger('MonitorService');
   private agents: Map<string, AgentInfo> = new Map();
+  public syncService: any;
 
   constructor(private chainService: ChainService) {}
 
@@ -35,6 +40,15 @@ export class MonitorService {
       }
 
       this.detectInactiveAgents();
+
+      if (this.syncService) {
+        try {
+          await this.syncService.syncAgents(Array.from(this.agents.values()));
+          await this.syncService.updateNetworkStats();
+        } catch (error) {
+          this.logger.error('Failed to sync to DB', error instanceof Error ? error.message : 'Unknown error');
+        }
+      }
     } catch (error) {
       this.logger.error('Error monitoring agents', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
@@ -47,8 +61,12 @@ export class MonitorService {
       const agentInfo: AgentInfo = {
         address,
         lastHeartbeat: Number(agentData.lastHeartbeat),
-        isActive: agentData.status === 1, // AgentStatus.Active = 1
+        isActive: agentData.status === 1,
         registeredAt: Number(agentData.registeredAt),
+        nodeId: agentData.nodeId || '',
+        metadata: agentData.metadata || '',
+        status: agentData.status,
+        stake: agentData.stake,
       };
 
       const existingAgent = this.agents.get(address);

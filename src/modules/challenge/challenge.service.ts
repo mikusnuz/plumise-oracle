@@ -22,6 +22,7 @@ export class ChallengeService implements OnModuleInit {
   private logger = new Logger('ChallengeService');
   private currentChallenge: Challenge | null = null;
   private challengeCreationTimes: Map<number, number> = new Map();
+  private syncService: any;
 
   constructor(
     private chainService: ChainService,
@@ -114,6 +115,14 @@ export class ChallengeService implements OnModuleInit {
           difficulty: challenge.difficulty.toString(),
           solved: challenge.solved,
         });
+
+        if (this.syncService) {
+          try {
+            await this.syncService.syncChallenge(challenge);
+          } catch (error) {
+            this.logger.error('Failed to sync challenge to DB', error instanceof Error ? error.message : 'Unknown error');
+          }
+        }
       } else {
         this.currentChallenge = null;
       }
@@ -151,5 +160,9 @@ export class ChallengeService implements OnModuleInit {
 
   getCurrentChallenge(): Challenge | null {
     return this.currentChallenge;
+  }
+
+  setSyncService(syncService: any) {
+    this.syncService = syncService;
   }
 }
