@@ -30,6 +30,10 @@ export class ChallengeService implements OnModuleInit {
 
   async onModuleInit() {
     try {
+      if (!this.chainService.challengeManager) {
+        this.logger.warn('ChallengeManager not configured - challenge features disabled');
+        return;
+      }
       await this.listenForChallengeEvents();
       await this.checkCurrentChallenge();
     } catch (error) {
@@ -38,6 +42,8 @@ export class ChallengeService implements OnModuleInit {
   }
 
   private async listenForChallengeEvents() {
+    if (!this.chainService.challengeManager) return;
+
     this.chainService.challengeManager.on(
       'ChallengeCreated',
       (id, difficulty, seed, expiresAt, rewardBonus) => {
@@ -70,6 +76,10 @@ export class ChallengeService implements OnModuleInit {
   @Interval(chainConfig.intervals.challenge)
   async checkAndCreateChallenge() {
     try {
+      if (!this.chainService.challengeManager) {
+        return;
+      }
+
       await this.checkCurrentChallenge();
 
       const now = Math.floor(Date.now() / 1000);
@@ -93,6 +103,8 @@ export class ChallengeService implements OnModuleInit {
 
   private async checkCurrentChallenge() {
     try {
+      if (!this.chainService.challengeManager) return;
+
       const challenge = await this.chainService.challengeManager.getCurrentChallenge();
 
       if (challenge && challenge.id > 0n) {
@@ -112,6 +124,8 @@ export class ChallengeService implements OnModuleInit {
 
   private async createNewChallenge() {
     try {
+      if (!this.chainService.challengeManager) return;
+
       const difficulty = 5;
       const seed = '0x' + randomBytes(32).toString('hex');
       const duration = 3600; // 1 hour

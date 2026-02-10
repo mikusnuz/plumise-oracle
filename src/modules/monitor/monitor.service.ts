@@ -21,6 +21,11 @@ export class MonitorService {
   @Interval(chainConfig.intervals.monitor)
   async monitorAgents() {
     try {
+      if (!this.chainService.agentRegistry) {
+        this.logger.debug('AgentRegistry not configured - skipping monitor');
+        return;
+      }
+
       const activeAgents: string[] = await this.chainService.agentRegistry.getActiveAgents();
 
       this.logger.debug(`Found ${activeAgents.length} active agents`);

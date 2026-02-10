@@ -7,12 +7,13 @@ import { ScorerModule } from './modules/scorer/scorer.module';
 import { ReporterModule } from './modules/reporter/reporter.module';
 import { ChallengeModule } from './modules/challenge/challenge.module';
 import { DistributorModule } from './modules/distributor/distributor.module';
+import { join } from 'path';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: join(process.cwd(), '.env'),
     }),
     ScheduleModule.forRoot(),
     ChainModule,

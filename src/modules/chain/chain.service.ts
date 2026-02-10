@@ -33,29 +33,34 @@ export class ChainService implements OnModuleInit {
       this.logger.log(`Oracle wallet: ${this.wallet.address}`);
       this.logger.log(`Balance: ${ethers.formatEther(balance)} PLM`);
 
-      this.agentRegistry = new ethers.Contract(
-        chainConfig.contracts.agentRegistry,
-        AgentRegistryAbi,
-        this.wallet,
-      );
+      if (chainConfig.contracts.agentRegistry) {
+        this.agentRegistry = new ethers.Contract(
+          chainConfig.contracts.agentRegistry,
+          AgentRegistryAbi,
+          this.wallet,
+        );
+        this.logger.log(`AgentRegistry: ${chainConfig.contracts.agentRegistry}`);
+      } else {
+        this.logger.warn('AgentRegistry address not configured - related features disabled');
+      }
 
       this.rewardPool = new ethers.Contract(
         chainConfig.contracts.rewardPool,
         RewardPoolAbi,
         this.wallet,
       );
+      this.logger.log(`RewardPool: ${chainConfig.contracts.rewardPool}`);
 
-      this.challengeManager = new ethers.Contract(
-        chainConfig.contracts.challengeManager,
-        ChallengeManagerAbi,
-        this.wallet,
-      );
-
-      this.logger.log('Contract instances created', {
-        agentRegistry: chainConfig.contracts.agentRegistry,
-        rewardPool: chainConfig.contracts.rewardPool,
-        challengeManager: chainConfig.contracts.challengeManager,
-      });
+      if (chainConfig.contracts.challengeManager) {
+        this.challengeManager = new ethers.Contract(
+          chainConfig.contracts.challengeManager,
+          ChallengeManagerAbi,
+          this.wallet,
+        );
+        this.logger.log(`ChallengeManager: ${chainConfig.contracts.challengeManager}`);
+      } else {
+        this.logger.warn('ChallengeManager address not configured - related features disabled');
+      }
 
       const currentEpoch = await this.rewardPool.getCurrentEpoch();
       this.logger.log(`Current epoch: ${currentEpoch}`);
