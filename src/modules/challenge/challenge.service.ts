@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { ChainService } from '../chain/chain.service';
 import { ScorerService } from '../scorer/scorer.service';
@@ -18,7 +18,7 @@ interface Challenge {
 }
 
 @Injectable()
-export class ChallengeService implements OnModuleInit {
+export class ChallengeService {
   private logger = new Logger('ChallengeService');
   private currentChallenge: Challenge | null = null;
   private challengeCreationTimes: Map<number, number> = new Map();
@@ -29,7 +29,7 @@ export class ChallengeService implements OnModuleInit {
     private scorerService: ScorerService,
   ) {}
 
-  async onModuleInit() {
+  async initialize() {
     try {
       if (!this.chainService.challengeManager) {
         this.logger.warn('ChallengeManager not configured - challenge features disabled');

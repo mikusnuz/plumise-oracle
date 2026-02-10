@@ -62,7 +62,8 @@ export class AppModule implements OnModuleInit {
     this.challengeService.setSyncService(this.syncService);
     this.distributorService.setSyncService(this.syncService);
 
-    // Run initial sync after all modules are initialized (ChainService ready)
+    // Initialize services after all modules are ready (ChainService connected)
+    await this.challengeService.initialize();
     try {
       await this.syncService.initialSync();
     } catch (error) {
