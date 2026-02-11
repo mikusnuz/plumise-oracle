@@ -20,12 +20,9 @@ export class MetricsService {
   async verifySignature(dto: ReportMetricsDto): Promise<boolean> {
     try {
       const message = JSON.stringify({
-        wallet: dto.wallet.toLowerCase(),
-        tokensProcessed: dto.tokensProcessed,
-        avgLatencyMs: dto.avgLatencyMs,
-        requestCount: dto.requestCount,
-        uptimeSeconds: dto.uptimeSeconds,
-        timestamp: Math.floor(Date.now() / 1000),
+        agent: dto.wallet,
+        processed_tokens: dto.tokensProcessed,
+        timestamp: dto.timestamp,
       });
 
       const recoveredAddress = ethers.verifyMessage(message, dto.signature);
@@ -36,7 +33,7 @@ export class MetricsService {
     }
   }
 
-  async recordMetrics(dto: ReportMetricsDto): Promise<boolean> {
+  async recordMetrics(dto: ReportMetricsDto): Promise<{ success: boolean; shouldReset: boolean }> {
     try {
       const currentEpoch = Number(await this.chainService.getCurrentEpoch());
       const wallet = dto.wallet.toLowerCase();
@@ -44,6 +41,8 @@ export class MetricsService {
       let metrics = await this.metricsRepo.findOne({
         where: { wallet, epoch: currentEpoch },
       });
+
+      const isNewEpoch = !metrics;
 
       if (!metrics) {
         metrics = this.metricsRepo.create({
@@ -79,12 +78,13 @@ export class MetricsService {
         tokensProcessed: metrics.tokensProcessed,
         avgLatencyMs: metrics.avgLatencyMs.toFixed(2),
         requestCount: metrics.requestCount,
+        isNewEpoch,
       });
 
-      return true;
+      return { success: true, shouldReset: isNewEpoch };
     } catch (error) {
       this.logger.error('Failed to record metrics', error instanceof Error ? error.message : 'Unknown error');
-      return false;
+      return { success: false, shouldReset: false };
     }
   }
 

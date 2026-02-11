@@ -1,27 +1,54 @@
-import { Controller, Post, Get, Body, Param, Query, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, BadRequestException, UnauthorizedException, Headers } from '@nestjs/common';
 import { MetricsService } from './metrics.service';
 import { ReportMetricsDto } from './dto/report-metrics.dto';
 
-@Controller('api/v1/metrics')
+@Controller()
 export class MetricsController {
   constructor(private metricsService: MetricsService) {}
 
-  @Post('report')
+  @Post('api/metrics')
+  async reportMetricsSimple(@Body() dto: ReportMetricsDto, @Headers('x-api-key') apiKey?: string) {
+    if (apiKey && apiKey !== process.env.ORACLE_API_KEY) {
+      throw new UnauthorizedException('Invalid API key');
+    }
+
+    const isValid = await this.metricsService.verifySignature(dto);
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid signature');
+    }
+
+    const result = await this.metricsService.recordMetrics(dto);
+    if (!result.success) {
+      throw new BadRequestException('Failed to record metrics');
+    }
+
+    return {
+      success: true,
+      message: 'Metrics recorded successfully',
+      shouldReset: result.shouldReset,
+    };
+  }
+
+  @Post('api/v1/metrics/report')
   async reportMetrics(@Body() dto: ReportMetricsDto) {
     const isValid = await this.metricsService.verifySignature(dto);
     if (!isValid) {
       throw new UnauthorizedException('Invalid signature');
     }
 
-    const success = await this.metricsService.recordMetrics(dto);
-    if (!success) {
+    const result = await this.metricsService.recordMetrics(dto);
+    if (!result.success) {
       throw new BadRequestException('Failed to record metrics');
     }
 
-    return { success: true, message: 'Metrics recorded successfully' };
+    return {
+      success: true,
+      message: 'Metrics recorded successfully',
+      shouldReset: result.shouldReset,
+    };
   }
 
-  @Get('agents/:address')
+  @Get('api/v1/metrics/agents/:address')
   async getAgentMetrics(
     @Param('address') address: string,
     @Query('epoch') epoch?: string,
@@ -47,7 +74,7 @@ export class MetricsController {
     };
   }
 
-  @Get('agents/:address/history')
+  @Get('api/v1/metrics/agents/:address/history')
   async getAgentMetricsHistory(
     @Param('address') address: string,
     @Query('limit') limit?: string,
@@ -72,7 +99,7 @@ export class MetricsController {
     };
   }
 
-  @Get('summary')
+  @Get('api/v1/metrics/summary')
   async getNetworkSummary() {
     return await this.metricsService.getNetworkMetricsSummary();
   }
