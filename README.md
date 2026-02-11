@@ -1,19 +1,56 @@
 # Plumise Oracle
 
-Contribution proof oracle for Plumise AI chain - monitors AI agents, creates challenges, calculates contribution scores, and reports them on-chain.
+**[English](README.md) | [한국어](README.ko.md)**
+
+Contribution proof oracle for Plumise AI chain -- monitors AI agents, collects inference metrics, calculates contribution scores, and reports rewards on-chain.
+
+This is a **team-operated service**. It acts as the bridge between Petals inference nodes and the Plumise blockchain, aggregating off-chain metrics into on-chain contribution records that determine PLM reward distribution.
 
 ## Overview
 
-The Plumise Oracle is a NestJS service that acts as the automated oracle for the Plumise AI chain. It performs the following tasks:
+The Plumise Oracle performs the following tasks:
 
 - **Agent Monitoring**: Tracks agent registrations, heartbeats, and activity
+- **Node Management**: Maintains a registry of active inference nodes (used by API Gateway)
 - **Challenge Automation**: Creates and manages AI agent challenges
-- **Inference Metrics Collection**: Receives and stores inference metrics from Petals nodes
-- **Contribution Scoring**: Calculates scores based on tasks, uptime, response time, tokens processed, and latency
-- **On-chain Reporting**: Reports contributions to RewardPool contract (V2 format)
+- **Inference Metrics Collection**: Receives signed metrics from Petals nodes, validates signatures
+- **Contribution Scoring**: Calculates scores using the V2 weighted formula
+- **On-chain Reporting**: Reports contribution scores to RewardPool via precompile 0x23
 - **Epoch Distribution**: Triggers reward distribution at epoch boundaries
 
 ## Architecture
+
+```
++-------------------+     +-------------------+     +-------------------+
+|  Petals Node A    |     |  Petals Node B    |     |  Petals Node C    |
+|  (signed metrics) |     |  (signed metrics) |     |  (signed metrics) |
++--------+----------+     +--------+----------+     +--------+----------+
+         |                         |                         |
+         v                         v                         v
++--------+-------------------------+-------------------------+--------+
+|                        Plumise Oracle (this service)                 |
+|                                                                      |
+|  +----------+  +----------+  +----------+  +-----------+             |
+|  | Metrics  |  | Scorer   |  | Reporter |  | Distribu- |             |
+|  | Module   |  | Module   |  | Module   |  | tor Module|             |
+|  +----------+  +----------+  +----------+  +-----------+             |
+|  +----------+  +----------+  +----------+  +-----------+             |
+|  | Monitor  |  | Challenge|  | Sync     |  | API       |             |
+|  | Module   |  | Module   |  | Module   |  | Module    |             |
+|  +----------+  +----------+  +----------+  +-----------+             |
++------------------+-------------------------------------+-------------+
+                   |                                     |
+                   v                                     v
+           +-------+--------+                   +--------+-------+
+           | RewardPool     |                   | Inference API  |
+           | (on-chain)     |                   | (Gateway)      |
+           | precompile 0x23|                   | node list API  |
+           +----------------+                   +----------------+
+```
+
+For the full ecosystem architecture, see [plumise-petals/docs/ARCHITECTURE.md](https://github.com/mikusnuz/plumise-petals/blob/main/docs/ARCHITECTURE.md).
+
+## Module Structure
 
 ```
 src/
@@ -39,6 +76,7 @@ src/
 
 - Node.js 18+
 - Yarn
+- MySQL database
 - Oracle wallet private key (must be set as oracle in RewardPool)
 
 ### Installation
@@ -51,29 +89,25 @@ yarn install
 
 Copy `.env.example` to `.env` and configure:
 
-```env
-# Chain
-RPC_URL=https://node-1.plumise.com/rpc
-WS_URL=wss://node-1.plumise.com/ws
-CHAIN_ID=41956
-
-# Oracle wallet (must be set as oracle in RewardPool)
-ORACLE_PRIVATE_KEY=your_private_key_here
-
-# Contract Addresses
-AGENT_REGISTRY_ADDRESS=0x...
-REWARD_POOL_ADDRESS=0x0000000000000000000000000000000000001000
-CHALLENGE_MANAGER_ADDRESS=0x...
-
-# Intervals
-MONITOR_INTERVAL_MS=30000
-CHALLENGE_INTERVAL_MS=600000
-REPORT_INTERVAL_BLOCKS=1200
-
-# Logging
-LOG_LEVEL=debug
-NODE_ENV=development
-```
+| Variable | Default | Description |
+|---|---|---|
+| `RPC_URL` | `https://node-1.plumise.com/rpc` | Plumise chain RPC endpoint |
+| `WS_URL` | `wss://node-1.plumise.com/ws` | Plumise chain WebSocket endpoint |
+| `CHAIN_ID` | `41956` | Plumise chain ID |
+| `ORACLE_PRIVATE_KEY` | -- | **Required.** Oracle wallet private key |
+| `AGENT_REGISTRY_ADDRESS` | -- | AgentRegistry contract address |
+| `REWARD_POOL_ADDRESS` | `0x...1000` | RewardPool contract address |
+| `CHALLENGE_MANAGER_ADDRESS` | -- | ChallengeManager contract address |
+| `MONITOR_INTERVAL_MS` | `30000` | Agent monitoring interval |
+| `CHALLENGE_INTERVAL_MS` | `600000` | Challenge creation interval |
+| `REPORT_INTERVAL_BLOCKS` | `1200` | On-chain reporting interval (blocks) |
+| `DB_HOST` | `localhost` | MySQL host |
+| `DB_PORT` | `15411` | MySQL port |
+| `DB_USERNAME` | `root` | MySQL username |
+| `DB_PASSWORD` | -- | MySQL password |
+| `DB_DATABASE` | `plumise_dashboard` | MySQL database name |
+| `API_PORT` | `15481` | Oracle API server port |
+| `LOG_LEVEL` | `debug` | Log level |
 
 ## Running
 
@@ -101,32 +135,27 @@ yarn start:prod
 Agent contribution scores are calculated using a weighted formula that reflects AI inference workload:
 
 ```
-score = (tokenScore × 40) + (taskCount × 25) + (uptimeSeconds × 20) + (latencyScore × 15)
+score = (tokenScore x 40) + (taskCount x 25) + (uptimeSeconds x 20) + (latencyScore x 15)
 
 where:
   tokenScore = processedTokens / 1000
-  latencyScore = avgLatencyInv (higher is better, max(0, 10000 - avgLatencyMs))
+  latencyScore = max(0, 10000 - avgLatencyMs)
 ```
 
 **Weights**:
 - **Tokens Processed**: 40% (primary metric for inference workload)
 - **Task Count**: 25% (challenges solved)
 - **Uptime**: 20% (agent availability)
-- **Latency**: 15% (response speed, inverted)
-
-**Metrics**:
-- `processedTokens`: Total tokens processed by the agent (from Petals)
-- `taskCount`: Number of challenges solved
-- `uptimeSeconds`: Time since last heartbeat gap
-- `responseScore`: Average challenge solve time (100 - avgSolveTime)
-- `avgLatencyInv`: Inverse latency score (10000 - avgLatencyMs)
+- **Latency**: 15% (response speed, inverted -- lower latency = higher score)
 
 ## API Endpoints
 
 ### Node Management
 
+These endpoints are consumed by the Inference API Gateway for node discovery and routing.
+
 #### POST `/api/nodes/register`
-Register a node with the oracle. Nodes must be registered on-chain first via AgentRegistry.
+Register a node with the oracle. Nodes must be registered on-chain first.
 
 **Request Body**:
 ```json
@@ -141,16 +170,8 @@ Register a node with the oracle. Nodes must be registered on-chain first via Age
 
 **Signature**: Sign the JSON payload (without signature field) with node's private key using `ethers.signMessage()`.
 
-**Response**:
-```json
-{
-  "success": true,
-  "message": "Node registered successfully"
-}
-```
-
 #### GET `/api/nodes`
-Get list of active nodes (used by Gateway for routing).
+Get list of all active nodes. **Used by Inference API Gateway for request routing.**
 
 **Response**:
 ```json
@@ -174,25 +195,18 @@ Get list of active nodes (used by Gateway for routing).
 #### GET `/api/nodes/:address`
 Get detailed information for a specific node.
 
-**Response**:
-```json
-{
-  "address": "0x...",
-  "endpoint": "http://server1:31330",
-  "capabilities": ["text-generation"],
-  "status": "active",
-  "score": 85.2,
-  "lastHeartbeat": "1707645600",
-  "lastMetricReport": "1707645590",
-  "createdAt": "2026-02-11T08:00:00Z",
-  "updatedAt": "2026-02-11T08:10:00Z"
-}
-```
+#### GET `/api/agents/active`
+Get all agents with active status (status = 1).
 
 ### Inference Metrics
 
+#### POST `/api/metrics`
+Report inference metrics (simple endpoint with optional API key).
+
+**Headers** (optional): `x-api-key: your-oracle-api-key`
+
 #### POST `/api/v1/metrics/report`
-Report inference metrics from Petals nodes. **Validates on-chain agent registration**.
+Report inference metrics from Petals nodes with signature verification.
 
 **Request Body**:
 ```json
@@ -202,36 +216,25 @@ Report inference metrics from Petals nodes. **Validates on-chain agent registrat
   "avgLatencyMs": 250.5,
   "requestCount": 100,
   "uptimeSeconds": 3600,
-  "timestamp": 1707645600,
   "signature": "0x..."
 }
 ```
 
 **Signature**: Sign the JSON payload (without signature field) with agent's private key using `ethers.signMessage()`.
 
-**Response**:
-```json
-{
-  "success": true,
-  "message": "Metrics recorded successfully",
-  "shouldReset": false
-}
-```
-
 **Validation**:
 - Signature must match wallet address
-- Agent must be registered on-chain (`agent_isAgentAccount` RPC check)
-- Token count must not exceed 1B per report (anti-abuse)
-
-**Auto-updates**:
-- Updates node's `lastMetricReport` and `lastHeartbeat` timestamps
-- Updates node status to `active` if it was `inactive`
+- Agent must be registered on-chain
 
 #### GET `/api/v1/metrics/agents/:address`
 Get current epoch metrics for an agent.
 
-#### GET `/api/v1/metrics/agents/:address/history?limit=50`
+**Query Params**: `?epoch=5` (optional, defaults to current epoch)
+
+#### GET `/api/v1/metrics/agents/:address/history`
 Get historical metrics across epochs.
+
+**Query Params**: `?limit=50` (optional, default 50)
 
 #### GET `/api/v1/metrics/summary`
 Get network-wide inference metrics summary.
@@ -242,16 +245,28 @@ Get network-wide inference metrics summary.
 Network statistics (block number, active agents, current epoch).
 
 #### GET `/api/agents`
-List all registered agents.
+List all registered agents (ordered by registration date, DESC).
 
 #### GET `/api/agents/:address`
-Get agent details and contribution history.
+Get agent details and contribution history (last 50 epochs).
+
+#### GET `/api/epochs`
+List recent epochs (last 50).
+
+#### GET `/api/epochs/:number`
+Get epoch details with per-agent contributions.
+
+#### GET `/api/challenges`
+List recent challenges (last 50).
+
+#### GET `/api/challenges/current`
+Get current active (unsolved, unexpired) challenge.
 
 #### GET `/api/rewards/:address`
-Get pending rewards and contributions.
+Get pending rewards and contribution history for an address.
 
 #### GET `/api/formula`
-Get current reward formula weights from RewardPool contract.
+Get current reward formula weights.
 
 ## Testing Inference Metrics
 
@@ -259,7 +274,7 @@ Run the test script to simulate a Petals node reporting metrics:
 
 ```bash
 # Start oracle in dev mode
-npm run start:dev
+yarn start:dev
 
 # In another terminal, run test script
 npx ts-node test-inference-metrics.ts
@@ -272,6 +287,15 @@ The test script will:
 4. Fetch network summary
 5. Send multiple incremental reports
 6. Display final aggregated metrics
+
+## Related Projects
+
+| Project | Description | Link |
+|---------|-------------|------|
+| **plumise-petals** | AI inference node (users/miners install this) | [GitHub](https://github.com/mikusnuz/plumise-petals) |
+| **plumise-inference-api** | API Gateway for end-user inference requests | [GitHub](https://github.com/mikusnuz/plumise-inference-api) |
+| **plumise** | Plumise chain node (geth fork with AI precompiles) | [GitHub](https://github.com/mikusnuz/plumise) |
+| **plumise-contracts** | On-chain system contracts (RewardPool, AgentRegistry, etc.) | [GitHub](https://github.com/mikusnuz/plumise-contracts) |
 
 ## License
 
