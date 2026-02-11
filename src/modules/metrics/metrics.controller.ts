@@ -1,5 +1,5 @@
 import { Controller, Post, Get, Body, Param, Query, BadRequestException, UnauthorizedException, Headers } from '@nestjs/common';
-import { ethers } from 'ethers';
+import { isAddress } from 'viem';
 import { MetricsService } from './metrics.service';
 import { ReportMetricsDto } from './dto/report-metrics.dto';
 import { RegisterNodeDto } from './dto/register-node.dto';
@@ -148,7 +148,7 @@ export class MetricsController {
 
   @Get('api/nodes/:address')
   async getNodeDetails(@Param('address') address: string) {
-    if (!ethers.isAddress(address)) {
+    if (!isAddress(address)) {
       throw new BadRequestException('Invalid address');
     }
 
@@ -176,7 +176,7 @@ export class MetricsController {
     @Query('limit') limit?: string,
     @Query('verified') verifiedOnly?: string,
   ) {
-    if (!ethers.isAddress(address)) {
+    if (!isAddress(address)) {
       throw new BadRequestException('Invalid address');
     }
 
@@ -211,7 +211,7 @@ export class MetricsController {
     @Param('address') address: string,
     @Query('epoch') epoch?: string,
   ) {
-    if (!ethers.isAddress(address)) {
+    if (!isAddress(address)) {
       throw new BadRequestException('Invalid address');
     }
 

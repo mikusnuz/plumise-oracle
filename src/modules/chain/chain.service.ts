@@ -1,19 +1,37 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { ethers } from 'ethers';
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  getContract,
+  type PublicClient,
+  type WalletClient,
+  type GetContractReturnType,
+  type Address,
+  type Account,
+  type WriteContractParameters,
+} from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import {
+  plumise,
+  addresses,
+  agentRegistryAbi,
+  rewardPoolAbi,
+  challengeManagerAbi,
+  formatPLM,
+} from '@plumise/core';
 import { chainConfig } from '../../config/chain.config';
 import { Logger } from '../../utils/logger';
-import AgentRegistryAbi from '../../contracts/AgentRegistry.json';
-import RewardPoolAbi from '../../contracts/RewardPool.json';
-import ChallengeManagerAbi from '../../contracts/ChallengeManager.json';
 
 @Injectable()
 export class ChainService implements OnModuleInit {
   private logger = new Logger('ChainService');
-  public provider: ethers.JsonRpcProvider;
-  public wallet: ethers.Wallet;
-  public agentRegistry: ethers.Contract;
-  public rewardPool: ethers.Contract;
-  public challengeManager: ethers.Contract;
+  private account: Account;
+  public publicClient: PublicClient;
+  public walletClient: WalletClient;
+  public agentRegistry: GetContractReturnType<typeof agentRegistryAbi, { public: PublicClient; wallet: WalletClient }> | null = null;
+  public rewardPool: GetContractReturnType<typeof rewardPoolAbi, { public: PublicClient; wallet: WalletClient }>;
+  public challengeManager: GetContractReturnType<typeof challengeManagerAbi, { public: PublicClient; wallet: WalletClient }> | null = null;
 
   async onModuleInit() {
     try {
@@ -23,46 +41,61 @@ export class ChainService implements OnModuleInit {
         throw new Error('ORACLE_PRIVATE_KEY not set in environment');
       }
 
-      this.provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl);
-      this.wallet = new ethers.Wallet(process.env.ORACLE_PRIVATE_KEY, this.provider);
+      const transport = http(chainConfig.rpcUrl);
+      const account = privateKeyToAccount(process.env.ORACLE_PRIVATE_KEY as `0x${string}`);
+      this.account = account;
 
-      const network = await this.provider.getNetwork();
-      this.logger.log(`Connected to chain ${network.chainId} (${network.name})`);
+      this.publicClient = createPublicClient({
+        chain: plumise,
+        transport,
+      });
 
-      const balance = await this.provider.getBalance(this.wallet.address);
-      this.logger.log(`Oracle wallet: ${this.wallet.address}`);
-      this.logger.log(`Balance: ${ethers.formatEther(balance)} PLM`);
+      this.walletClient = createWalletClient({
+        account,
+        chain: plumise,
+        transport,
+      });
 
-      if (chainConfig.contracts.agentRegistry) {
-        this.agentRegistry = new ethers.Contract(
-          chainConfig.contracts.agentRegistry,
-          AgentRegistryAbi,
-          this.wallet,
-        );
-        this.logger.log(`AgentRegistry: ${chainConfig.contracts.agentRegistry}`);
+      const chainId = await this.publicClient.getChainId();
+      this.logger.log(`Connected to chain ${chainId}`);
+
+      const balance = await this.publicClient.getBalance({ address: account.address });
+      this.logger.log(`Oracle wallet: ${account.address}`);
+      this.logger.log(`Balance: ${formatPLM(balance)} PLM`);
+
+      const agentRegistryAddr = chainConfig.contracts.agentRegistry || addresses.mainnet.AgentRegistry;
+      if (agentRegistryAddr) {
+        this.agentRegistry = getContract({
+          address: agentRegistryAddr as Address,
+          abi: agentRegistryAbi,
+          client: { public: this.publicClient, wallet: this.walletClient },
+        });
+        this.logger.log(`AgentRegistry: ${agentRegistryAddr}`);
       } else {
         this.logger.warn('AgentRegistry address not configured - related features disabled');
       }
 
-      this.rewardPool = new ethers.Contract(
-        chainConfig.contracts.rewardPool,
-        RewardPoolAbi,
-        this.wallet,
-      );
-      this.logger.log(`RewardPool: ${chainConfig.contracts.rewardPool}`);
+      const rewardPoolAddr = chainConfig.contracts.rewardPool || addresses.mainnet.RewardPool;
+      this.rewardPool = getContract({
+        address: rewardPoolAddr as Address,
+        abi: rewardPoolAbi,
+        client: { public: this.publicClient, wallet: this.walletClient },
+      });
+      this.logger.log(`RewardPool: ${rewardPoolAddr}`);
 
-      if (chainConfig.contracts.challengeManager) {
-        this.challengeManager = new ethers.Contract(
-          chainConfig.contracts.challengeManager,
-          ChallengeManagerAbi,
-          this.wallet,
-        );
-        this.logger.log(`ChallengeManager: ${chainConfig.contracts.challengeManager}`);
+      const challengeManagerAddr = chainConfig.contracts.challengeManager || addresses.mainnet.ChallengeManager;
+      if (challengeManagerAddr) {
+        this.challengeManager = getContract({
+          address: challengeManagerAddr as Address,
+          abi: challengeManagerAbi,
+          client: { public: this.publicClient, wallet: this.walletClient },
+        });
+        this.logger.log(`ChallengeManager: ${challengeManagerAddr}`);
       } else {
         this.logger.warn('ChallengeManager address not configured - related features disabled');
       }
 
-      const currentEpoch = await this.rewardPool.getCurrentEpoch();
+      const currentEpoch = await this.rewardPool.read.getCurrentEpoch();
       this.logger.log(`Current epoch: ${currentEpoch}`);
     } catch (error) {
       const isDev = process.env.NODE_ENV !== 'production';
@@ -75,10 +108,18 @@ export class ChainService implements OnModuleInit {
   }
 
   async getCurrentBlock(): Promise<number> {
-    return await this.provider.getBlockNumber();
+    return Number(await this.publicClient.getBlockNumber());
   }
 
   async getCurrentEpoch(): Promise<bigint> {
-    return await this.rewardPool.getCurrentEpoch();
+    return await this.rewardPool.read.getCurrentEpoch();
+  }
+
+  async writeContract(params: Omit<WriteContractParameters, 'chain' | 'account'>): Promise<`0x${string}`> {
+    return this.walletClient.writeContract({
+      ...params,
+      chain: plumise,
+      account: this.account,
+    } as any);
   }
 }

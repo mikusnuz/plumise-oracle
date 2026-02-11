@@ -45,31 +45,41 @@ export class ChallengeService {
   private async listenForChallengeEvents() {
     if (!this.chainService.challengeManager) return;
 
-    this.chainService.challengeManager.on(
-      'ChallengeCreated',
-      (id, difficulty, seed, expiresAt, rewardBonus) => {
-        this.logger.log(`Challenge created: #${id}`, {
-          difficulty: difficulty.toString(),
-          expiresAt: expiresAt.toString(),
-        });
-        this.challengeCreationTimes.set(Number(id), Date.now());
-      },
-    );
-
-    this.chainService.challengeManager.on(
-      'ChallengeSolved',
-      (id, solver, solution, solveTime) => {
-        this.logger.log(`Challenge solved: #${id} by ${solver}`, {
-          solveTime: solveTime.toString(),
-        });
-
-        const creationTime = this.challengeCreationTimes.get(Number(id));
-        if (creationTime) {
-          const solveTimeSeconds = Math.floor((Date.now() - creationTime) / 1000);
-          this.scorerService.recordTask(solver, Number(id), solveTimeSeconds);
+    this.chainService.publicClient.watchContractEvent({
+      address: this.chainService.challengeManager.address,
+      abi: this.chainService.challengeManager.abi,
+      eventName: 'ChallengeCreated',
+      onLogs: (logs) => {
+        for (const log of logs) {
+          const { id, difficulty, expiresAt } = log.args as any;
+          this.logger.log(`Challenge created: #${id}`, {
+            difficulty: difficulty.toString(),
+            expiresAt: expiresAt.toString(),
+          });
+          this.challengeCreationTimes.set(Number(id), Date.now());
         }
       },
-    );
+    });
+
+    this.chainService.publicClient.watchContractEvent({
+      address: this.chainService.challengeManager.address,
+      abi: this.chainService.challengeManager.abi,
+      eventName: 'ChallengeSolved',
+      onLogs: (logs) => {
+        for (const log of logs) {
+          const { id, solver, solveTime } = log.args as any;
+          this.logger.log(`Challenge solved: #${id} by ${solver}`, {
+            solveTime: solveTime.toString(),
+          });
+
+          const creationTime = this.challengeCreationTimes.get(Number(id));
+          if (creationTime) {
+            const solveTimeSeconds = Math.floor((Date.now() - creationTime) / 1000);
+            this.scorerService.recordTask(solver, Number(id), solveTimeSeconds);
+          }
+        }
+      },
+    });
 
     this.logger.log('Challenge event listeners initialized');
   }
@@ -106,7 +116,7 @@ export class ChallengeService {
     try {
       if (!this.chainService.challengeManager) return;
 
-      const challenge = await this.chainService.challengeManager.getCurrentChallenge();
+      const challenge = await this.chainService.challengeManager!.read.getCurrentChallenge();
 
       if (challenge && challenge.id > 0n) {
         this.currentChallenge = challenge;
@@ -141,15 +151,16 @@ export class ChallengeService {
 
       this.logger.log('Creating new challenge', { difficulty, duration });
 
-      const tx = await this.chainService.challengeManager.createChallenge(
-        difficulty,
-        seed,
-        duration,
-      );
+      const txHash = await this.chainService.writeContract({
+        address: this.chainService.challengeManager!.address,
+        abi: this.chainService.challengeManager!.abi,
+        functionName: 'createChallenge',
+        args: [BigInt(difficulty), seed as `0x${string}`, BigInt(duration)],
+      });
 
-      this.logger.log(`Challenge creation tx submitted: ${tx.hash}`);
+      this.logger.log(`Challenge creation tx submitted: ${txHash}`);
 
-      await tx.wait();
+      await this.chainService.publicClient.waitForTransactionReceipt({ hash: txHash });
       this.logger.log('Challenge created successfully');
 
       await this.checkCurrentChallenge();

@@ -72,14 +72,19 @@ export class ReporterService {
       const currentEpoch = Number(await this.chainService.getCurrentEpoch());
       const score = await this.scorerService.getAgentScore(agentAddress);
 
-      const tx = await this.chainService.rewardPool.reportContribution(
-        agentAddress,
-        score.taskCount,
-        score.uptimeSeconds,
-        score.responseScore,
-        score.processedTokens.toString(),
-        score.avgLatencyInv,
-      );
+      const txHash = await this.chainService.writeContract({
+        address: this.chainService.rewardPool.address,
+        abi: this.chainService.rewardPool.abi,
+        functionName: 'reportContribution',
+        args: [
+          agentAddress as `0x${string}`,
+          BigInt(score.taskCount),
+          BigInt(score.uptimeSeconds),
+          BigInt(score.responseScore),
+          BigInt(score.processedTokens.toString()),
+          BigInt(score.avgLatencyInv),
+        ],
+      });
 
       this.logger.log(`Contribution reported for ${agentAddress}`, {
         epoch: currentEpoch,
@@ -88,11 +93,11 @@ export class ReporterService {
         responseScore: score.responseScore,
         processedTokens: score.processedTokens.toString(),
         avgLatencyInv: score.avgLatencyInv,
-        txHash: tx.hash,
+        txHash,
       });
 
-      await tx.wait();
-      this.logger.debug(`Transaction confirmed: ${tx.hash}`);
+      await this.chainService.publicClient.waitForTransactionReceipt({ hash: txHash });
+      this.logger.debug(`Transaction confirmed: ${txHash}`);
 
       await this.saveContributionToDB(agentAddress, currentEpoch, score);
     } catch (error) {

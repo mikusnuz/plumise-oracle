@@ -209,7 +209,7 @@ export class ApiController {
       throw new NotFoundException('RewardPool not configured');
     }
 
-    const pendingReward = await this.chainService.rewardPool.getPendingReward(address);
+    const pendingReward = await this.chainService.rewardPool.read.getPendingReward([address as `0x${string}`]);
 
     const contributions = await this.contributionRepo.find({
       where: { wallet: address.toLowerCase() },

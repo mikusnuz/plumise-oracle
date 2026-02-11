@@ -54,7 +54,7 @@ export class DistributorService {
 
   async distributeEpochRewards(epoch: bigint) {
     try {
-      const isDistributed = await this.chainService.rewardPool.epochDistributed(epoch);
+      const isDistributed = await this.chainService.rewardPool.read.epochDistributed([epoch]);
 
       if (isDistributed) {
         this.logger.debug(`Epoch ${epoch} already distributed`);
@@ -64,16 +64,25 @@ export class DistributorService {
 
       this.logger.log(`Distributing rewards for epoch ${epoch}`);
 
-      const syncTx = await this.chainService.rewardPool.syncRewards();
-      this.logger.log(`Syncing rewards, tx: ${syncTx.hash}`);
-      await syncTx.wait();
+      const syncHash = await this.chainService.writeContract({
+        address: this.chainService.rewardPool.address,
+        abi: this.chainService.rewardPool.abi,
+        functionName: 'syncRewards',
+      });
+      this.logger.log(`Syncing rewards, tx: ${syncHash}`);
+      await this.chainService.publicClient.waitForTransactionReceipt({ hash: syncHash });
 
-      const distributeTx = await this.chainService.rewardPool.distributeRewards(epoch);
-      this.logger.log(`Distribution tx submitted: ${distributeTx.hash}`);
+      const distributeHash = await this.chainService.writeContract({
+        address: this.chainService.rewardPool.address,
+        abi: this.chainService.rewardPool.abi,
+        functionName: 'distributeRewards',
+        args: [epoch],
+      });
+      this.logger.log(`Distribution tx submitted: ${distributeHash}`);
 
-      const receipt = await distributeTx.wait();
+      const receipt = await this.chainService.publicClient.waitForTransactionReceipt({ hash: distributeHash });
       this.logger.log(`Epoch ${epoch} rewards distributed successfully`, {
-        txHash: receipt.hash,
+        txHash: receipt.transactionHash,
         gasUsed: receipt.gasUsed.toString(),
       });
 
@@ -86,13 +95,13 @@ export class DistributorService {
   private async syncEpochContributions(epoch: bigint) {
     try {
       const epochNum = Number(epoch);
-      const epochAgents = await this.chainService.rewardPool.getEpochAgents(epoch);
+      const epochAgents = await this.chainService.rewardPool.read.getEpochAgents([epoch]);
 
       this.logger.log(`Syncing contributions for ${epochAgents.length} agents in epoch ${epochNum}`);
 
       for (const agentAddress of epochAgents) {
         try {
-          const contribution = await this.chainService.rewardPool.getEpochContribution(epoch, agentAddress);
+          const contribution = await this.chainService.rewardPool.read.getEpochContribution([epoch, agentAddress as `0x${string}`]);
 
           if (contribution.lastUpdated > 0n) {
             const wallet = agentAddress.toLowerCase();
