@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Logger } from '../../utils/logger';
 import { NodesService } from '../nodes/nodes.service';
+import { ProofService } from '../proof/proof.service';
+import { ChainService } from '../chain/chain.service';
 
 export interface AgentScore {
   address: string;
@@ -10,6 +12,8 @@ export interface AgentScore {
   processedTokens: bigint;
   avgLatencyInv: number;
   totalScore: number;
+  verifiedTokens?: bigint;
+  proofVerificationRate?: number;
 }
 
 interface TaskRecord {
@@ -25,11 +29,19 @@ export class ScorerService {
   private agentUptimes: Map<string, number> = new Map();
   private epochStartTime: number = Date.now();
   private metricsService: any;
+  private chainService: ChainService;
 
-  constructor(private nodesService: NodesService) {}
+  constructor(
+    private nodesService: NodesService,
+    private proofService: ProofService,
+  ) {}
 
   setMetricsService(metricsService: any) {
     this.metricsService = metricsService;
+  }
+
+  setChainService(chainService: ChainService) {
+    this.chainService = chainService;
   }
 
   calculateScore(
@@ -94,6 +106,8 @@ export class ScorerService {
 
     let processedTokens = BigInt(0);
     let avgLatencyInv = 0;
+    let verifiedTokens = BigInt(0);
+    let proofVerificationRate = 0;
 
     if (this.metricsService) {
       try {
@@ -106,6 +120,21 @@ export class ScorerService {
         }
       } catch (error) {
         this.logger.debug(`No inference metrics for ${agentAddress}`);
+      }
+    }
+
+    if (this.chainService) {
+      try {
+        const currentEpoch = Number(await this.chainService.getCurrentEpoch());
+        const proofStats = await this.proofService.getProofStats(agentAddress, currentEpoch);
+        verifiedTokens = BigInt(proofStats.verifiedTokens);
+        proofVerificationRate = proofStats.verificationRate;
+
+        if (verifiedTokens > processedTokens) {
+          processedTokens = verifiedTokens;
+        }
+      } catch (error) {
+        this.logger.debug(`No proof stats for ${agentAddress}`);
       }
     }
 
@@ -127,6 +156,8 @@ export class ScorerService {
       processedTokens,
       avgLatencyInv,
       totalScore,
+      verifiedTokens,
+      proofVerificationRate,
     };
   }
 

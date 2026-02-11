@@ -1,5 +1,6 @@
-import { IsEthereumAddress, IsNumber, IsString, Min } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { IsEthereumAddress, IsNumber, IsString, Min, IsArray, ValidateNested, IsOptional } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { InferenceProofDto } from '../../proof/dto/inference-proof.dto';
 
 export class ReportMetricsDto {
   @IsEthereumAddress()
@@ -32,4 +33,10 @@ export class ReportMetricsDto {
 
   @IsString()
   signature: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InferenceProofDto)
+  proofs?: InferenceProofDto[];
 }

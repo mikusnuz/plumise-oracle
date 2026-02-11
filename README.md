@@ -14,7 +14,8 @@ The Plumise Oracle performs the following tasks:
 - **Node Management**: Maintains a registry of active inference nodes (used by API Gateway)
 - **Challenge Automation**: Creates and manages AI agent challenges
 - **Inference Metrics Collection**: Receives signed metrics from Petals nodes, validates signatures
-- **Contribution Scoring**: Calculates scores using the V2 weighted formula
+- **Inference Proof Verification**: Receives and stores inference proofs from Petals nodes, enriches scoring
+- **Contribution Scoring**: Calculates scores using the V2 weighted formula (enriched with proof data)
 - **On-chain Reporting**: Reports contribution scores to RewardPool via precompile 0x23
 - **Epoch Distribution**: Triggers reward distribution at epoch boundaries
 
@@ -38,6 +39,10 @@ The Plumise Oracle performs the following tasks:
 |  | Monitor  |  | Challenge|  | Sync     |  | API       |             |
 |  | Module   |  | Module   |  | Module   |  | Module    |             |
 |  +----------+  +----------+  +----------+  +-----------+             |
+|  +----------+                                                        |
+|  | Proof    |  (receives, stores, and queries inference proofs)       |
+|  | Module   |                                                        |
+|  +----------+                                                        |
 +------------------+-------------------------------------+-------------+
                    |                                     |
                    v                                     v
@@ -58,6 +63,7 @@ src/
 │   ├── chain/         # Web3 provider & contract instances
 │   ├── monitor/       # Agent activity monitoring
 │   ├── metrics/       # Inference metrics collection & storage
+│   ├── proof/         # Inference proof verification & storage
 │   ├── scorer/        # Contribution score calculation (V2 formula)
 │   ├── reporter/      # On-chain contribution reporting (V2)
 │   ├── challenge/     # Challenge creation & tracking
@@ -147,6 +153,22 @@ where:
 - **Task Count**: 25% (challenges solved)
 - **Uptime**: 20% (agent availability)
 - **Latency**: 15% (response speed, inverted -- lower latency = higher score)
+
+## Inference Proof Verification
+
+The Oracle receives inference proofs from Petals nodes, stores them, and uses them to enrich contribution scoring. This provides a verifiable record of actual AI work performed by each agent.
+
+**Proof Flow:**
+
+1. Petals node completes an inference and generates a proof hash: `keccak256(modelHash || inputHash || outputHash || agentAddress)`
+2. The signed proof is submitted to the Oracle via `POST /api/v1/proofs/submit`
+3. Oracle validates the signature and stores the proof with metadata (model, timestamp, agent)
+4. During scoring, proof count and validity are factored into the agent's contribution score
+5. Proofs can be queried per agent or by time range for audit purposes
+
+**Scoring Enrichment:**
+
+Agents with a higher ratio of valid proofs receive a scoring bonus. This discourages fake metric reporting -- without corresponding proofs, inflated metrics are penalized.
 
 ## API Endpoints
 
@@ -238,6 +260,60 @@ Get historical metrics across epochs.
 
 #### GET `/api/v1/metrics/summary`
 Get network-wide inference metrics summary.
+
+### Inference Proofs
+
+#### POST `/api/v1/proofs/submit`
+Submit an inference proof from a Petals node.
+
+**Request Body**:
+```json
+{
+  "agent": "0x...",
+  "proofHash": "0x...",
+  "modelHash": "0x...",
+  "inputHash": "0x...",
+  "outputHash": "0x...",
+  "timestamp": 1707645600,
+  "signature": "0x..."
+}
+```
+
+**Signature**: Sign the proof payload (without signature field) with the agent's private key.
+
+#### GET `/api/v1/proofs/agent/:address`
+Get proofs submitted by a specific agent.
+
+**Query Params**: `?limit=50&offset=0&from=1707600000&to=1707700000` (all optional)
+
+**Response**:
+```json
+{
+  "count": 128,
+  "proofs": [
+    {
+      "proofHash": "0x...",
+      "modelHash": "0x...",
+      "agent": "0x...",
+      "timestamp": 1707645600,
+      "verified": true
+    }
+  ]
+}
+```
+
+#### GET `/api/v1/proofs/stats`
+Get network-wide proof statistics.
+
+**Response**:
+```json
+{
+  "totalProofs": 5240,
+  "uniqueAgents": 12,
+  "proofsLast24h": 320,
+  "verificationRate": 0.98
+}
+```
 
 ### Agent & Contribution Data
 

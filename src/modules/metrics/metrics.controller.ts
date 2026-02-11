@@ -4,12 +4,14 @@ import { MetricsService } from './metrics.service';
 import { ReportMetricsDto } from './dto/report-metrics.dto';
 import { RegisterNodeDto } from './dto/register-node.dto';
 import { NodesService } from '../nodes/nodes.service';
+import { ProofService } from '../proof/proof.service';
 
 @Controller()
 export class MetricsController {
   constructor(
     private metricsService: MetricsService,
     private nodesService: NodesService,
+    private proofService: ProofService,
   ) {}
 
   @Post('api/metrics')
@@ -165,6 +167,65 @@ export class MetricsController {
       lastMetricReport: node.lastMetricReport,
       createdAt: node.createdAt,
       updatedAt: node.updatedAt,
+    };
+  }
+
+  @Get('api/v1/proofs/:address')
+  async getAgentProofs(
+    @Param('address') address: string,
+    @Query('limit') limit?: string,
+    @Query('verified') verifiedOnly?: string,
+  ) {
+    if (!ethers.isAddress(address)) {
+      throw new BadRequestException('Invalid address');
+    }
+
+    const limitNum = limit ? parseInt(limit) : 100;
+    if (limit && (isNaN(limitNum) || limitNum < 1 || limitNum > 1000)) {
+      throw new BadRequestException('Invalid limit (1-1000)');
+    }
+
+    const onlyVerified = verifiedOnly === 'true';
+    const proofs = await this.proofService.getProofsByAgent(address, limitNum, onlyVerified);
+
+    return {
+      address,
+      count: proofs.length,
+      proofs: proofs.map(p => ({
+        id: p.id,
+        epoch: p.epoch,
+        modelHash: p.modelHash,
+        inputHash: p.inputHash,
+        outputHash: p.outputHash,
+        tokenCount: p.tokenCount,
+        verified: p.verified,
+        verificationTxHash: p.verificationTxHash,
+        createdAt: p.createdAt,
+        verifiedAt: p.verifiedAt,
+      })),
+    };
+  }
+
+  @Get('api/v1/proofs/:address/stats')
+  async getAgentProofStats(
+    @Param('address') address: string,
+    @Query('epoch') epoch?: string,
+  ) {
+    if (!ethers.isAddress(address)) {
+      throw new BadRequestException('Invalid address');
+    }
+
+    const epochNum = epoch ? parseInt(epoch) : undefined;
+    if (epoch && isNaN(epochNum!)) {
+      throw new BadRequestException('Invalid epoch number');
+    }
+
+    const stats = await this.proofService.getProofStats(address, epochNum);
+
+    return {
+      address,
+      epoch: epochNum,
+      ...stats,
     };
   }
 }

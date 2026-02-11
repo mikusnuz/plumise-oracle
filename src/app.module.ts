@@ -12,13 +12,15 @@ import { SyncModule } from './modules/sync/sync.module';
 import { ApiModule } from './modules/api/api.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { NodesModule } from './modules/nodes/nodes.module';
-import { Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics } from './entities';
+import { ProofModule } from './modules/proof/proof.module';
+import { Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof } from './entities';
 import { MonitorService } from './modules/monitor/monitor.service';
 import { ChallengeService } from './modules/challenge/challenge.service';
 import { DistributorService } from './modules/distributor/distributor.service';
 import { SyncService } from './modules/sync/sync.service';
 import { ScorerService } from './modules/scorer/scorer.service';
 import { MetricsService } from './modules/metrics/metrics.service';
+import { ChainService } from './modules/chain/chain.service';
 import { join } from 'path';
 
 @Module({
@@ -38,7 +40,7 @@ import { join } from 'path';
         username: configService.get('DB_USERNAME', 'root'),
         password: configService.get('DB_PASSWORD', 'plumbug!db!1q2w3e4r'),
         database: configService.get('DB_DATABASE', 'plumise_dashboard'),
-        entities: [Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics],
+        entities: [Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof],
         synchronize: true,
         logging: false,
       }),
@@ -53,6 +55,7 @@ import { join } from 'path';
     ApiModule,
     MetricsModule,
     NodesModule,
+    ProofModule,
   ],
 })
 export class AppModule implements OnModuleInit {
@@ -63,6 +66,7 @@ export class AppModule implements OnModuleInit {
     @Inject(SyncService) private syncService: SyncService,
     @Inject(ScorerService) private scorerService: ScorerService,
     @Inject(MetricsService) private metricsService: MetricsService,
+    @Inject(ChainService) private chainService: ChainService,
   ) {}
 
   async onModuleInit() {
@@ -70,6 +74,7 @@ export class AppModule implements OnModuleInit {
     this.challengeService.setSyncService(this.syncService);
     this.distributorService.setSyncService(this.syncService);
     this.scorerService.setMetricsService(this.metricsService);
+    this.scorerService.setChainService(this.chainService);
 
     // Initialize services after all modules are ready (ChainService connected)
     await this.challengeService.initialize();

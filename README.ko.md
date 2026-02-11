@@ -201,6 +201,8 @@ Oracle에 노드를 등록합니다. 노드는 온체인에 먼저 등록되어�
 #### POST `/api/metrics`
 추론 메트릭을 보고합니다 (선택적 API 키 포함 간단한 엔드포인트).
 
+**헤더** (선택): `x-api-key: your-oracle-api-key`
+
 #### POST `/api/v1/metrics/report`
 서명 검증이 포함된 Petals 노드의 추론 메트릭을 보고합니다.
 
@@ -228,6 +230,69 @@ Oracle에 노드를 등록합니다. 노드는 온체인에 먼저 등록되어�
 
 #### GET `/api/v1/metrics/summary`
 네트워크 전체 추론 메트릭 요약을 조회합니다.
+
+### 추론 증명 검증 (Inference Proof Verification)
+
+**Milestone 2.3** 기능으로, Petals 노드로부터 받은 추론 증명을 검증하고 저장합니다.
+
+#### POST `/api/v1/proofs/submit`
+Petals 노드가 추론 증명을 제출합니다.
+
+**요청 본문**:
+```json
+{
+  "agent": "0x...",
+  "proofHash": "0x1234...",
+  "input": "프롬프트 텍스트",
+  "output": "생성된 텍스트",
+  "timestamp": 1707645600,
+  "model": "bloom-560m",
+  "signature": "0x5678..."
+}
+```
+
+**검증 절차**:
+1. 서명이 에이전트 주소와 일치하는지 확인
+2. 에이전트가 온체인에 등록되어 있는지 확인
+3. 타임스탬프가 유효한지 확인 (만료되지 않음)
+4. 증명 해시를 재계산하여 일치 여부 확인: `keccak256(입력 + 출력 + 타임스탬프 + 모델 + 에이전트)`
+5. 중복 증명 해시가 아닌지 확인
+
+#### GET `/api/v1/proofs/:hash`
+특정 증명 해시의 상세 정보를 조회합니다.
+
+**응답**:
+```json
+{
+  "proofHash": "0x1234...",
+  "agent": "0x...",
+  "input": "프롬프트 텍스트",
+  "output": "생성된 텍스트",
+  "timestamp": 1707645600,
+  "model": "bloom-560m",
+  "verified": true,
+  "createdAt": "2024-02-11T12:00:00Z"
+}
+```
+
+#### GET `/api/v1/proofs/agent/:address`
+특정 에이전트의 모든 증명 목록을 조회합니다.
+
+**쿼리 파라미터**: `?limit=50&offset=0` (선택, 페이지네이션)
+
+#### GET `/api/v1/proofs/stats`
+전체 네트워크의 증명 통계를 조회합니다.
+
+**응답**:
+```json
+{
+  "totalProofs": 10000,
+  "totalAgents": 50,
+  "proofs24h": 2400,
+  "avgProofsPerAgent": 200,
+  "verifiedRate": 0.998
+}
+```
 
 ### 에이전트 및 기여 데이터
 

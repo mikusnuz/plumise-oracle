@@ -7,6 +7,7 @@ import { Logger } from '../../utils/logger';
 import { ChainService } from '../chain/chain.service';
 import { ReportMetricsDto } from './dto/report-metrics.dto';
 import { NodesService } from '../nodes/nodes.service';
+import { ProofService } from '../proof/proof.service';
 
 @Injectable()
 export class MetricsService {
@@ -17,6 +18,7 @@ export class MetricsService {
     private metricsRepo: Repository<InferenceMetrics>,
     private chainService: ChainService,
     private nodesService: NodesService,
+    private proofService: ProofService,
   ) {}
 
   async verifySignature(dto: ReportMetricsDto): Promise<boolean> {
@@ -89,11 +91,26 @@ export class MetricsService {
 
       await this.nodesService.updateNodeMetricReport(wallet);
 
+      if (dto.proofs && dto.proofs.length > 0) {
+        try {
+          for (const proof of dto.proofs) {
+            await this.proofService.saveProof(wallet, currentEpoch, proof);
+          }
+          this.logger.debug(`Saved ${dto.proofs.length} proofs for ${wallet}`);
+        } catch (error) {
+          this.logger.error(
+            `Failed to save proofs for ${wallet}`,
+            error instanceof Error ? error.message : 'Unknown error',
+          );
+        }
+      }
+
       this.logger.debug(`Metrics recorded for ${wallet}`, {
         epoch: currentEpoch,
         tokensProcessed: metrics.tokensProcessed,
         avgLatencyMs: metrics.avgLatencyMs.toFixed(2),
         requestCount: metrics.requestCount,
+        proofsSubmitted: dto.proofs?.length || 0,
         isNewEpoch,
       });
 
