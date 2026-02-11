@@ -64,19 +64,23 @@ export class ReporterService {
 
   async reportAgentContribution(agentAddress: string) {
     try {
-      const score = this.scorerService.getAgentScore(agentAddress);
+      const score = await this.scorerService.getAgentScore(agentAddress);
 
       const tx = await this.chainService.rewardPool.reportContribution(
         agentAddress,
         score.taskCount,
         score.uptimeSeconds,
         score.responseScore,
+        score.processedTokens.toString(),
+        score.avgLatencyInv,
       );
 
       this.logger.log(`Contribution reported for ${agentAddress}`, {
         taskCount: score.taskCount,
         uptimeSeconds: score.uptimeSeconds,
         responseScore: score.responseScore,
+        processedTokens: score.processedTokens.toString(),
+        avgLatencyInv: score.avgLatencyInv,
         txHash: tx.hash,
       });
 

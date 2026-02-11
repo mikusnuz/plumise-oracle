@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { Logger } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -9,6 +9,12 @@ async function bootstrap() {
     const app = await NestFactory.create(AppModule, {
       logger: ['log', 'error', 'warn', 'debug'],
     });
+
+    app.useGlobalPipes(new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }));
 
     app.enableCors();
 

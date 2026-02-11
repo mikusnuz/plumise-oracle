@@ -100,6 +100,8 @@ export class ApiController {
         taskCount: c.taskCount,
         uptimeSeconds: c.uptimeSeconds,
         responseScore: c.responseScore,
+        processedTokens: c.processedTokens,
+        avgLatencyInv: c.avgLatencyInv,
         lastUpdated: c.lastUpdated,
       })),
     };
@@ -223,6 +225,8 @@ export class ApiController {
         taskCount: c.taskCount,
         uptimeSeconds: c.uptimeSeconds,
         responseScore: c.responseScore,
+        processedTokens: c.processedTokens,
+        avgLatencyInv: c.avgLatencyInv,
         lastUpdated: c.lastUpdated,
       })),
     };

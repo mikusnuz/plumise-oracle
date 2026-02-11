@@ -6,6 +6,8 @@ export interface AgentScore {
   taskCount: number;
   uptimeSeconds: number;
   responseScore: number;
+  processedTokens: bigint;
+  avgLatencyInv: number;
   totalScore: number;
 }
 
@@ -21,21 +23,30 @@ export class ScorerService {
   private agentTasks: Map<string, TaskRecord[]> = new Map();
   private agentUptimes: Map<string, number> = new Map();
   private epochStartTime: number = Date.now();
+  private metricsService: any;
+
+  setMetricsService(metricsService: any) {
+    this.metricsService = metricsService;
+  }
 
   calculateScore(
     taskCount: number,
     uptimeSeconds: number,
     responseScore: number,
+    processedTokens: bigint = BigInt(0),
+    avgLatencyInv: number = 0,
   ): number {
-    const TASK_WEIGHT = 50;
-    const UPTIME_WEIGHT = 30;
-    const RESPONSE_WEIGHT = 20;
+    const TOKEN_WEIGHT = 40;
+    const TASK_WEIGHT = 25;
+    const UPTIME_WEIGHT = 20;
+    const LATENCY_WEIGHT = 15;
 
-    return (
-      taskCount * TASK_WEIGHT +
-      uptimeSeconds * UPTIME_WEIGHT +
-      responseScore * RESPONSE_WEIGHT
-    );
+    const tokenScore = Number(processedTokens) / 1000;
+    const taskScore = taskCount * TASK_WEIGHT;
+    const uptimeScore = uptimeSeconds * UPTIME_WEIGHT;
+    const latencyScore = avgLatencyInv * LATENCY_WEIGHT;
+
+    return tokenScore * TOKEN_WEIGHT + taskScore + uptimeScore + latencyScore;
   }
 
   recordTask(agentAddress: string, challengeId: number, solveTime: number) {
@@ -58,7 +69,7 @@ export class ScorerService {
     this.agentUptimes.set(agentAddress, uptimeSeconds);
   }
 
-  getAgentScore(agentAddress: string): AgentScore {
+  async getAgentScore(agentAddress: string): Promise<AgentScore> {
     const tasks = this.agentTasks.get(agentAddress) || [];
     const taskCount = tasks.length;
 
@@ -72,19 +83,45 @@ export class ScorerService {
     }
 
     const responseScore = Math.floor(avgResponseScore);
-    const totalScore = this.calculateScore(taskCount, uptimeSeconds, responseScore);
+
+    let processedTokens = BigInt(0);
+    let avgLatencyInv = 0;
+
+    if (this.metricsService) {
+      try {
+        const metrics = await this.metricsService.getAgentMetrics(agentAddress);
+        if (metrics) {
+          processedTokens = BigInt(metrics.tokensProcessed);
+          if (metrics.avgLatencyMs > 0) {
+            avgLatencyInv = Math.floor(Math.max(0, 10000 - metrics.avgLatencyMs));
+          }
+        }
+      } catch (error) {
+        this.logger.debug(`No inference metrics for ${agentAddress}`);
+      }
+    }
+
+    const totalScore = this.calculateScore(
+      taskCount,
+      uptimeSeconds,
+      responseScore,
+      processedTokens,
+      avgLatencyInv,
+    );
 
     return {
       address: agentAddress,
       taskCount,
       uptimeSeconds,
       responseScore,
+      processedTokens,
+      avgLatencyInv,
       totalScore,
     };
   }
 
-  getAllAgentScores(agentAddresses: string[]): AgentScore[] {
-    return agentAddresses.map(address => this.getAgentScore(address));
+  async getAllAgentScores(agentAddresses: string[]): Promise<AgentScore[]> {
+    return await Promise.all(agentAddresses.map(address => this.getAgentScore(address)));
   }
 
   resetEpochData() {
