@@ -36,17 +36,23 @@ export class ScorerService {
     processedTokens: bigint = BigInt(0),
     avgLatencyInv: number = 0,
   ): number {
-    const TOKEN_WEIGHT = 40;
-    const TASK_WEIGHT = 25;
-    const UPTIME_WEIGHT = 20;
-    const LATENCY_WEIGHT = 15;
+    const TASK_WEIGHT = 50;
+    const UPTIME_WEIGHT = 30;
+    const RESPONSE_WEIGHT = 20;
 
-    const tokenScore = Number(processedTokens) / 1000;
-    const taskScore = taskCount * TASK_WEIGHT;
-    const uptimeScore = uptimeSeconds * UPTIME_WEIGHT;
-    const latencyScore = avgLatencyInv * LATENCY_WEIGHT;
+    const EXPECTED_TASKS_PER_EPOCH = 100;
+    const EPOCH_DURATION_SECONDS = 3600;
 
-    return tokenScore * TOKEN_WEIGHT + taskScore + uptimeScore + latencyScore;
+    const taskScoreNormalized = Math.min(100, (taskCount / EXPECTED_TASKS_PER_EPOCH) * 100);
+    const uptimeScoreNormalized = Math.min(100, (uptimeSeconds / EPOCH_DURATION_SECONDS) * 100);
+    const responseScoreNormalized = Math.min(100, responseScore);
+
+    return (
+      (taskScoreNormalized * TASK_WEIGHT +
+        uptimeScoreNormalized * UPTIME_WEIGHT +
+        responseScoreNormalized * RESPONSE_WEIGHT) /
+      100
+    );
   }
 
   recordTask(agentAddress: string, challengeId: number, solveTime: number) {
@@ -75,14 +81,13 @@ export class ScorerService {
 
     const uptimeSeconds = this.agentUptimes.get(agentAddress) || 0;
 
-    let avgResponseScore = 0;
+    let responseScore = 100;
     if (tasks.length > 0) {
       const totalSolveTime = tasks.reduce((sum, task) => sum + task.solveTime, 0);
       const avgSolveTime = totalSolveTime / tasks.length;
-      avgResponseScore = Math.max(0, 100 - avgSolveTime);
+      const normalizedSpeed = Math.min(100, Math.max(0, 100 - avgSolveTime / 10));
+      responseScore = Math.floor(normalizedSpeed);
     }
-
-    const responseScore = Math.floor(avgResponseScore);
 
     let processedTokens = BigInt(0);
     let avgLatencyInv = 0;

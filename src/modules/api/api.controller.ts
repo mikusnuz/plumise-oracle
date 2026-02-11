@@ -234,30 +234,10 @@ export class ApiController {
 
   @Get('formula')
   async getFormula() {
-    if (!this.chainService.rewardPool) {
-      throw new NotFoundException('RewardPool not configured');
-    }
-
-    try {
-      const taskWeight = await this.chainService.rewardPool.taskWeight();
-      const uptimeWeight = await this.chainService.rewardPool.uptimeWeight();
-      const latencyWeight = await this.chainService.rewardPool.latencyWeight();
-      const tokenWeight = await this.chainService.rewardPool.tokenWeight();
-
-      return {
-        taskWeight: Number(taskWeight),
-        uptimeWeight: Number(uptimeWeight),
-        latencyWeight: Number(latencyWeight),
-        tokenWeight: Number(tokenWeight),
-      };
-    } catch (error) {
-      return {
-        taskWeight: 0,
-        uptimeWeight: 0,
-        latencyWeight: 0,
-        tokenWeight: 0,
-        error: 'Failed to fetch weights from contract',
-      };
-    }
+    return {
+      task: 50,
+      uptime: 30,
+      response: 20,
+    };
   }
 }

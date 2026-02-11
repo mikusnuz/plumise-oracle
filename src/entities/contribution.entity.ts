@@ -3,6 +3,7 @@ import { Entity, Column, PrimaryGeneratedColumn, Index, Unique } from 'typeorm';
 @Entity('contributions')
 @Unique(['wallet', 'epoch'])
 @Index(['epoch'])
+@Index(['wallet'])
 export class Contribution {
   @PrimaryGeneratedColumn()
   id: number;
