@@ -1,10 +1,16 @@
 import { Controller, Post, Get, Body, Param, Query, BadRequestException, UnauthorizedException, Headers } from '@nestjs/common';
+import { ethers } from 'ethers';
 import { MetricsService } from './metrics.service';
 import { ReportMetricsDto } from './dto/report-metrics.dto';
+import { RegisterNodeDto } from './dto/register-node.dto';
+import { NodesService } from '../nodes/nodes.service';
 
 @Controller()
 export class MetricsController {
-  constructor(private metricsService: MetricsService) {}
+  constructor(
+    private metricsService: MetricsService,
+    private nodesService: NodesService,
+  ) {}
 
   @Post('api/metrics')
   async reportMetricsSimple(@Body() dto: ReportMetricsDto, @Headers('x-api-key') apiKey?: string) {
@@ -19,7 +25,7 @@ export class MetricsController {
 
     const result = await this.metricsService.recordMetrics(dto);
     if (!result.success) {
-      throw new BadRequestException('Failed to record metrics');
+      throw new BadRequestException(result.error || 'Failed to record metrics');
     }
 
     return {
@@ -38,7 +44,7 @@ export class MetricsController {
 
     const result = await this.metricsService.recordMetrics(dto);
     if (!result.success) {
-      throw new BadRequestException('Failed to record metrics');
+      throw new BadRequestException(result.error || 'Failed to record metrics');
     }
 
     return {
@@ -102,5 +108,63 @@ export class MetricsController {
   @Get('api/v1/metrics/summary')
   async getNetworkSummary() {
     return await this.metricsService.getNetworkMetricsSummary();
+  }
+
+  @Post('api/nodes/register')
+  async registerNode(@Body() dto: RegisterNodeDto) {
+    const isValidSignature = await this.nodesService.verifyRegistrationSignature(dto);
+    if (!isValidSignature) {
+      throw new UnauthorizedException('Invalid signature');
+    }
+
+    const result = await this.nodesService.registerNode(dto);
+    if (!result.success) {
+      throw new BadRequestException(result.message);
+    }
+
+    return {
+      success: true,
+      message: result.message,
+    };
+  }
+
+  @Get('api/nodes')
+  async getActiveNodes() {
+    const nodes = await this.nodesService.getActiveNodes();
+    return {
+      count: nodes.length,
+      nodes: nodes.map(node => ({
+        address: node.address,
+        endpoint: node.endpoint,
+        status: node.status,
+        score: node.score,
+        lastHeartbeat: node.lastHeartbeat,
+        capabilities: node.capabilities,
+      })),
+    };
+  }
+
+  @Get('api/nodes/:address')
+  async getNodeDetails(@Param('address') address: string) {
+    if (!ethers.isAddress(address)) {
+      throw new BadRequestException('Invalid address');
+    }
+
+    const node = await this.nodesService.getNodeByAddress(address);
+    if (!node) {
+      throw new BadRequestException('Node not found');
+    }
+
+    return {
+      address: node.address,
+      endpoint: node.endpoint,
+      capabilities: node.capabilities,
+      status: node.status,
+      score: node.score,
+      lastHeartbeat: node.lastHeartbeat,
+      lastMetricReport: node.lastMetricReport,
+      createdAt: node.createdAt,
+      updatedAt: node.updatedAt,
+    };
   }
 }

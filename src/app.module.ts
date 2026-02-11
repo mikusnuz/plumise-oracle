@@ -11,7 +11,8 @@ import { DistributorModule } from './modules/distributor/distributor.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { ApiModule } from './modules/api/api.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
-import { Agent, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics } from './entities';
+import { NodesModule } from './modules/nodes/nodes.module';
+import { Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics } from './entities';
 import { MonitorService } from './modules/monitor/monitor.service';
 import { ChallengeService } from './modules/challenge/challenge.service';
 import { DistributorService } from './modules/distributor/distributor.service';
@@ -37,7 +38,7 @@ import { join } from 'path';
         username: configService.get('DB_USERNAME', 'root'),
         password: configService.get('DB_PASSWORD', 'plumbug!db!1q2w3e4r'),
         database: configService.get('DB_DATABASE', 'plumise_dashboard'),
-        entities: [Agent, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics],
+        entities: [Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics],
         synchronize: true,
         logging: false,
       }),
@@ -51,6 +52,7 @@ import { join } from 'path';
     DistributorModule,
     ApiModule,
     MetricsModule,
+    NodesModule,
   ],
 })
 export class AppModule implements OnModuleInit {

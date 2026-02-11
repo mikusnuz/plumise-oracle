@@ -6,6 +6,7 @@ import { InferenceMetrics } from '../../entities';
 import { Logger } from '../../utils/logger';
 import { ChainService } from '../chain/chain.service';
 import { ReportMetricsDto } from './dto/report-metrics.dto';
+import { NodesService } from '../nodes/nodes.service';
 
 @Injectable()
 export class MetricsService {
@@ -15,6 +16,7 @@ export class MetricsService {
     @InjectRepository(InferenceMetrics)
     private metricsRepo: Repository<InferenceMetrics>,
     private chainService: ChainService,
+    private nodesService: NodesService,
   ) {}
 
   async verifySignature(dto: ReportMetricsDto): Promise<boolean> {
@@ -33,10 +35,22 @@ export class MetricsService {
     }
   }
 
-  async recordMetrics(dto: ReportMetricsDto): Promise<{ success: boolean; shouldReset: boolean }> {
+  async recordMetrics(dto: ReportMetricsDto): Promise<{ success: boolean; shouldReset: boolean; error?: string }> {
     try {
-      const currentEpoch = Number(await this.chainService.getCurrentEpoch());
       const wallet = dto.wallet.toLowerCase();
+
+      const isRegistered = await this.nodesService.isAgentRegisteredOnChain(wallet);
+      if (!isRegistered) {
+        this.logger.warn(`Rejected metrics from unregistered agent: ${wallet}`);
+        return { success: false, shouldReset: false, error: 'Agent not registered on-chain' };
+      }
+
+      if (!this.nodesService.validateTokensProcessed(dto.tokensProcessed)) {
+        this.logger.warn(`Rejected metrics from ${wallet}: invalid token count ${dto.tokensProcessed}`);
+        return { success: false, shouldReset: false, error: 'Token count exceeds maximum allowed' };
+      }
+
+      const currentEpoch = Number(await this.chainService.getCurrentEpoch());
 
       let metrics = await this.metricsRepo.findOne({
         where: { wallet, epoch: currentEpoch },
@@ -73,6 +87,8 @@ export class MetricsService {
 
       await this.metricsRepo.save(metrics);
 
+      await this.nodesService.updateNodeMetricReport(wallet);
+
       this.logger.debug(`Metrics recorded for ${wallet}`, {
         epoch: currentEpoch,
         tokensProcessed: metrics.tokensProcessed,
@@ -84,7 +100,7 @@ export class MetricsService {
       return { success: true, shouldReset: isNewEpoch };
     } catch (error) {
       this.logger.error('Failed to record metrics', error instanceof Error ? error.message : 'Unknown error');
-      return { success: false, shouldReset: false };
+      return { success: false, shouldReset: false, error: 'Internal server error' };
     }
   }
 

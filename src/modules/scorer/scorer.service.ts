@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Logger } from '../../utils/logger';
+import { NodesService } from '../nodes/nodes.service';
 
 export interface AgentScore {
   address: string;
@@ -24,6 +25,8 @@ export class ScorerService {
   private agentUptimes: Map<string, number> = new Map();
   private epochStartTime: number = Date.now();
   private metricsService: any;
+
+  constructor(private nodesService: NodesService) {}
 
   setMetricsService(metricsService: any) {
     this.metricsService = metricsService;
@@ -113,6 +116,8 @@ export class ScorerService {
       processedTokens,
       avgLatencyInv,
     );
+
+    await this.nodesService.updateNodeScore(agentAddress, totalScore);
 
     return {
       address: agentAddress,

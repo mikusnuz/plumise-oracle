@@ -123,10 +123,76 @@ where:
 
 ## API Endpoints
 
+### Node Management
+
+#### POST `/api/nodes/register`
+Register a node with the oracle. Nodes must be registered on-chain first via AgentRegistry.
+
+**Request Body**:
+```json
+{
+  "address": "0x...",
+  "endpoint": "http://my-server:31330",
+  "capabilities": ["text-generation"],
+  "timestamp": 1707645600,
+  "signature": "0x..."
+}
+```
+
+**Signature**: Sign the JSON payload (without signature field) with node's private key using `ethers.signMessage()`.
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Node registered successfully"
+}
+```
+
+#### GET `/api/nodes`
+Get list of active nodes (used by Gateway for routing).
+
+**Response**:
+```json
+{
+  "count": 3,
+  "nodes": [
+    {
+      "address": "0x...",
+      "endpoint": "http://server1:31330",
+      "status": "active",
+      "score": 85.2,
+      "lastHeartbeat": "1707645600",
+      "capabilities": ["text-generation"]
+    }
+  ]
+}
+```
+
+**Active Criteria**: Last heartbeat within 10 minutes AND on-chain heartbeat active.
+
+#### GET `/api/nodes/:address`
+Get detailed information for a specific node.
+
+**Response**:
+```json
+{
+  "address": "0x...",
+  "endpoint": "http://server1:31330",
+  "capabilities": ["text-generation"],
+  "status": "active",
+  "score": 85.2,
+  "lastHeartbeat": "1707645600",
+  "lastMetricReport": "1707645590",
+  "createdAt": "2026-02-11T08:00:00Z",
+  "updatedAt": "2026-02-11T08:10:00Z"
+}
+```
+
 ### Inference Metrics
 
 #### POST `/api/v1/metrics/report`
-Report inference metrics from Petals nodes.
+Report inference metrics from Petals nodes. **Validates on-chain agent registration**.
 
 **Request Body**:
 ```json
@@ -136,11 +202,30 @@ Report inference metrics from Petals nodes.
   "avgLatencyMs": 250.5,
   "requestCount": 100,
   "uptimeSeconds": 3600,
+  "timestamp": 1707645600,
   "signature": "0x..."
 }
 ```
 
 **Signature**: Sign the JSON payload (without signature field) with agent's private key using `ethers.signMessage()`.
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Metrics recorded successfully",
+  "shouldReset": false
+}
+```
+
+**Validation**:
+- Signature must match wallet address
+- Agent must be registered on-chain (`agent_isAgentAccount` RPC check)
+- Token count must not exceed 1B per report (anti-abuse)
+
+**Auto-updates**:
+- Updates node's `lastMetricReport` and `lastHeartbeat` timestamps
+- Updates node status to `active` if it was `inactive`
 
 #### GET `/api/v1/metrics/agents/:address`
 Get current epoch metrics for an agent.

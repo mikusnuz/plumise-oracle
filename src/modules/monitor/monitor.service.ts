@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { ChainService } from '../chain/chain.service';
+import { NodesService } from '../nodes/nodes.service';
 import { Logger } from '../../utils/logger';
 import { chainConfig } from '../../config/chain.config';
 
@@ -21,7 +22,10 @@ export class MonitorService {
   private agents: Map<string, AgentInfo> = new Map();
   public syncService: any;
 
-  constructor(private chainService: ChainService) {}
+  constructor(
+    private chainService: ChainService,
+    private nodesService: NodesService,
+  ) {}
 
   @Interval(chainConfig.intervals.monitor)
   async monitorAgents() {
@@ -49,6 +53,8 @@ export class MonitorService {
           this.logger.error('Failed to sync to DB', error instanceof Error ? error.message : 'Unknown error');
         }
       }
+
+      await this.nodesService.markInactiveNodes();
     } catch (error) {
       this.logger.error('Error monitoring agents', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }

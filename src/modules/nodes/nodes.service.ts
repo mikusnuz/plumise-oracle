@@ -1,0 +1,189 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, LessThan } from 'typeorm';
+import { ethers } from 'ethers';
+import { AgentNode } from '../../entities';
+import { Logger } from '../../utils/logger';
+import { ChainService } from '../chain/chain.service';
+import { RegisterNodeDto } from '../metrics/dto/register-node.dto';
+
+const HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_TOKENS_PER_REPORT = 1_000_000_000; // 1B tokens per report
+
+@Injectable()
+export class NodesService {
+  private logger = new Logger('NodesService');
+
+  constructor(
+    @InjectRepository(AgentNode)
+    private nodeRepo: Repository<AgentNode>,
+    private chainService: ChainService,
+  ) {}
+
+  async verifyRegistrationSignature(dto: RegisterNodeDto): Promise<boolean> {
+    try {
+      const message = JSON.stringify({
+        address: dto.address,
+        endpoint: dto.endpoint,
+        capabilities: dto.capabilities,
+        timestamp: dto.timestamp,
+      });
+
+      const recoveredAddress = ethers.verifyMessage(message, dto.signature);
+      return recoveredAddress.toLowerCase() === dto.address.toLowerCase();
+    } catch (error) {
+      this.logger.error('Signature verification failed', error instanceof Error ? error.message : 'Unknown error');
+      return false;
+    }
+  }
+
+  async isAgentRegisteredOnChain(address: string): Promise<boolean> {
+    try {
+      if (!this.chainService.agentRegistry) {
+        this.logger.warn('AgentRegistry not configured, skipping on-chain verification');
+        return true;
+      }
+
+      const result = await this.chainService.provider.send('agent_isAgentAccount', [address]);
+      return result === true;
+    } catch (error) {
+      this.logger.error('Failed to verify agent on-chain', error instanceof Error ? error.message : 'Unknown error');
+      return false;
+    }
+  }
+
+  async registerNode(dto: RegisterNodeDto): Promise<{ success: boolean; message: string }> {
+    try {
+      const address = dto.address.toLowerCase();
+
+      const isRegistered = await this.isAgentRegisteredOnChain(address);
+      if (!isRegistered) {
+        return { success: false, message: 'Address not registered as agent on-chain' };
+      }
+
+      let node = await this.nodeRepo.findOne({ where: { address } });
+
+      const now = String(Math.floor(Date.now() / 1000));
+
+      if (!node) {
+        node = this.nodeRepo.create({
+          address,
+          endpoint: dto.endpoint,
+          capabilities: dto.capabilities,
+          status: 'active',
+          score: 0,
+          lastHeartbeat: now,
+          lastMetricReport: now,
+          registrationSignature: dto.signature,
+        });
+        this.logger.log(`New node registered: ${address}`);
+      } else {
+        node.endpoint = dto.endpoint;
+        node.capabilities = dto.capabilities;
+        node.status = 'active';
+        node.lastHeartbeat = now;
+        this.logger.log(`Node updated: ${address}`);
+      }
+
+      await this.nodeRepo.save(node);
+
+      return { success: true, message: 'Node registered successfully' };
+    } catch (error) {
+      this.logger.error('Failed to register node', error instanceof Error ? error.message : 'Unknown error');
+      return { success: false, message: 'Internal server error' };
+    }
+  }
+
+  async updateNodeHeartbeat(address: string): Promise<void> {
+    try {
+      const node = await this.nodeRepo.findOne({ where: { address: address.toLowerCase() } });
+      if (node) {
+        node.lastHeartbeat = String(Math.floor(Date.now() / 1000));
+        if (node.status === 'inactive') {
+          node.status = 'active';
+        }
+        await this.nodeRepo.save(node);
+      }
+    } catch (error) {
+      this.logger.error('Failed to update heartbeat', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  async updateNodeMetricReport(address: string): Promise<void> {
+    try {
+      const node = await this.nodeRepo.findOne({ where: { address: address.toLowerCase() } });
+      if (node) {
+        node.lastMetricReport = String(Math.floor(Date.now() / 1000));
+        node.lastHeartbeat = String(Math.floor(Date.now() / 1000));
+        if (node.status === 'inactive') {
+          node.status = 'active';
+        }
+        await this.nodeRepo.save(node);
+      }
+    } catch (error) {
+      this.logger.error('Failed to update metric report time', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  async updateNodeScore(address: string, score: number): Promise<void> {
+    try {
+      const node = await this.nodeRepo.findOne({ where: { address: address.toLowerCase() } });
+      if (node) {
+        node.score = score;
+        await this.nodeRepo.save(node);
+      }
+    } catch (error) {
+      this.logger.error('Failed to update node score', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  async getActiveNodes(): Promise<AgentNode[]> {
+    try {
+      const cutoffTime = String(Math.floor((Date.now() - HEARTBEAT_TIMEOUT_MS) / 1000));
+
+      const nodes = await this.nodeRepo.find({
+        where: {
+          status: 'active',
+        },
+      });
+
+      return nodes.filter(node => BigInt(node.lastHeartbeat) > BigInt(cutoffTime));
+    } catch (error) {
+      this.logger.error('Failed to get active nodes', error instanceof Error ? error.message : 'Unknown error');
+      return [];
+    }
+  }
+
+  async getNodeByAddress(address: string): Promise<AgentNode | null> {
+    try {
+      return await this.nodeRepo.findOne({ where: { address: address.toLowerCase() } });
+    } catch (error) {
+      this.logger.error('Failed to get node', error instanceof Error ? error.message : 'Unknown error');
+      return null;
+    }
+  }
+
+  async markInactiveNodes(): Promise<void> {
+    try {
+      const cutoffTime = String(Math.floor((Date.now() - HEARTBEAT_TIMEOUT_MS) / 1000));
+
+      const result = await this.nodeRepo
+        .createQueryBuilder()
+        .update(AgentNode)
+        .set({ status: 'inactive' })
+        .where('status = :status', { status: 'active' })
+        .andWhere('lastHeartbeat < :cutoff', { cutoff: cutoffTime })
+        .execute();
+
+      if (result.affected && result.affected > 0) {
+        this.logger.log(`Marked ${result.affected} nodes as inactive`);
+      }
+    } catch (error) {
+      this.logger.error('Failed to mark inactive nodes', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  validateTokensProcessed(tokens: number): boolean {
+    return tokens >= 0 && tokens <= MAX_TOKENS_PER_REPORT;
+  }
+}
