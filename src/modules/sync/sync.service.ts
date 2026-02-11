@@ -30,12 +30,12 @@ export class SyncService {
     }
 
     try {
-      const allAgents = await this.chainService.agentRegistry.getAllAgents();
+      const allAgents = await this.chainService.agentRegistry!.read.getAllAgents();
       this.logger.log(`Syncing ${allAgents.length} agents...`);
 
       for (const agentAddress of allAgents) {
         try {
-          const agentData = await this.chainService.agentRegistry.getAgent(agentAddress);
+          const agentData = await this.chainService.agentRegistry!.read.getAgent([agentAddress as `0x${string}`]);
           await this.agentRepo.save({
             wallet: agentAddress.toLowerCase(),
             nodeId: agentData.nodeId || '',
@@ -59,9 +59,9 @@ export class SyncService {
 
         for (let i = startEpoch; i <= epochNum; i++) {
           try {
-            const epochReward = await this.chainService.rewardPool.epochRewards(BigInt(i));
-            const epochAgentsList = await this.chainService.rewardPool.getEpochAgents(BigInt(i));
-            const distributed = await this.chainService.rewardPool.epochDistributed(BigInt(i));
+            const epochReward = await this.chainService.rewardPool.read.epochRewards([BigInt(i)]);
+            const epochAgentsList = await this.chainService.rewardPool.read.getEpochAgents([BigInt(i)]);
+            const distributed = await this.chainService.rewardPool.read.epochDistributed([BigInt(i)]);
 
             await this.epochRepo.save({
               number: i,
@@ -72,7 +72,7 @@ export class SyncService {
 
             for (const agentAddress of allAgents) {
               try {
-                const contribution = await this.chainService.rewardPool.getEpochContribution(BigInt(i), agentAddress);
+                const contribution = await this.chainService.rewardPool.read.getEpochContribution([BigInt(i), agentAddress as `0x${string}`]);
                 if (contribution.lastUpdated > 0n) {
                   await this.contributionRepo.save({
                     wallet: agentAddress.toLowerCase(),
@@ -95,12 +95,12 @@ export class SyncService {
 
       if (this.chainService.challengeManager) {
         try {
-          const totalChallenges = await this.chainService.challengeManager.getTotalChallenges();
+          const totalChallenges = await this.chainService.challengeManager!.read.getTotalChallenges();
           const total = Number(totalChallenges);
 
           if (total > 0) {
             this.logger.log(`Syncing challenges (total: ${total})...`);
-            const challengeHistory = await this.chainService.challengeManager.getChallengeHistory(0, total);
+            const challengeHistory = await this.chainService.challengeManager!.read.getChallengeHistory([BigInt(0), BigInt(total)]);
 
             for (let i = 0; i < challengeHistory.length; i++) {
               const ch = challengeHistory[i];
@@ -112,7 +112,7 @@ export class SyncService {
                   createdAt: ch.createdAt.toString(),
                   expiresAt: ch.expiresAt.toString(),
                   solved: ch.solved,
-                  solver: ch.solver === '0x0000000000000000000000000000000000000000' ? null : ch.solver,
+                  solver: ch.solver === '0x0000000000000000000000000000000000000000' ? undefined : ch.solver,
                   rewardBonus: ch.rewardBonus.toString(),
                 });
               } catch (error) {
@@ -158,7 +158,7 @@ export class SyncService {
         createdAt: challenge.createdAt.toString(),
         expiresAt: challenge.expiresAt.toString(),
         solved: challenge.solved,
-        solver: challenge.solver === '0x0000000000000000000000000000000000000000' ? null : challenge.solver,
+        solver: challenge.solver === '0x0000000000000000000000000000000000000000' ? undefined : challenge.solver,
         rewardBonus: challenge.rewardBonus.toString(),
       });
     } catch (error) {
@@ -170,9 +170,9 @@ export class SyncService {
     try {
       if (!this.chainService.rewardPool) return;
 
-      const epochReward = await this.chainService.rewardPool.epochRewards(epochNumber);
-      const epochAgentsList = await this.chainService.rewardPool.getEpochAgents(epochNumber);
-      const distributed = await this.chainService.rewardPool.epochDistributed(epochNumber);
+      const epochReward = await this.chainService.rewardPool.read.epochRewards([epochNumber]);
+      const epochAgentsList = await this.chainService.rewardPool.read.getEpochAgents([epochNumber]);
+      const distributed = await this.chainService.rewardPool.read.epochDistributed([epochNumber]);
 
       await this.epochRepo.save({
         number: Number(epochNumber),
@@ -200,9 +200,35 @@ export class SyncService {
     }
   }
 
+  /**
+   * Ensure a precompile-registered agent exists in the agents table.
+   * Called when metrics arrive from a verified precompile agent.
+   */
+  async ensurePrecompileAgent(wallet: string): Promise<void> {
+    try {
+      const addr = wallet.toLowerCase();
+      const existing = await this.agentRepo.findOne({ where: { wallet: addr } });
+      if (existing) return;
+
+      const now = String(Math.floor(Date.now() / 1000));
+      await this.agentRepo.save({
+        wallet: addr,
+        nodeId: '',
+        metadata: 'precompile-registered',
+        registeredAt: now,
+        lastHeartbeat: now,
+        status: 1,
+        stake: '0',
+      });
+      this.logger.log(`Auto-registered precompile agent: ${addr}`);
+    } catch (error) {
+      this.logger.error(`Failed to auto-register precompile agent ${wallet}`, error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
   async updateNetworkStats() {
     try {
-      const blockNumber = await this.chainService.provider.getBlockNumber();
+      const blockNumber = await this.chainService.publicClient.getBlockNumber();
       const currentEpoch = await this.chainService.getCurrentEpoch();
 
       const totalAgents = await this.agentRepo.count();

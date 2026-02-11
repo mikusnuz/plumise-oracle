@@ -30,17 +30,42 @@ export class MonitorService {
   @Interval(chainConfig.intervals.monitor)
   async monitorAgents() {
     try {
-      if (!this.chainService.agentRegistry) {
-        this.logger.debug('AgentRegistry not configured - skipping monitor');
-        return;
+      // 1. Discover contract-registered agents
+      if (this.chainService.agentRegistry) {
+        try {
+          const activeAgents = await this.chainService.agentRegistry!.read.getActiveAgents();
+          this.logger.debug(`Found ${activeAgents.length} contract agents`);
+          for (const agentAddress of activeAgents) {
+            await this.updateAgentInfo(agentAddress);
+          }
+        } catch (error) {
+          this.logger.error('Failed to read contract agents', error instanceof Error ? error.message : 'Unknown error');
+        }
       }
 
-      const activeAgents: string[] = await this.chainService.agentRegistry.getActiveAgents();
-
-      this.logger.debug(`Found ${activeAgents.length} active agents`);
-
-      for (const agentAddress of activeAgents) {
-        await this.updateAgentInfo(agentAddress);
+      // 2. Discover precompile agents from active nodes (auto-registered via metrics)
+      const activeNodes = await this.nodesService.getActiveNodes();
+      for (const node of activeNodes) {
+        if (!this.agents.has(node.address)) {
+          this.agents.set(node.address, {
+            address: node.address,
+            lastHeartbeat: Number(node.lastHeartbeat),
+            isActive: true,
+            registeredAt: Math.floor(node.createdAt.getTime() / 1000),
+            nodeId: '',
+            metadata: 'precompile-registered',
+            status: 1,
+            stake: 0n,
+          });
+          this.logger.debug(`Discovered precompile agent from nodes: ${node.address}`);
+        } else {
+          // Update heartbeat from node data
+          const existing = this.agents.get(node.address)!;
+          const nodeHb = Number(node.lastHeartbeat);
+          if (nodeHb > existing.lastHeartbeat) {
+            this.agents.set(node.address, { ...existing, lastHeartbeat: nodeHb, isActive: true });
+          }
+        }
       }
 
       this.detectInactiveAgents();
@@ -62,7 +87,7 @@ export class MonitorService {
 
   private async updateAgentInfo(address: string) {
     try {
-      const agentData = await this.chainService.agentRegistry.getAgent(address);
+      const agentData = await this.chainService.agentRegistry!.read.getAgent([address as `0x${string}`]);
 
       const agentInfo: AgentInfo = {
         address,

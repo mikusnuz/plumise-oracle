@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
-import { ethers } from 'ethers';
+import { verifyMessage } from 'viem';
 import { AgentNode } from '../../entities';
 import { Logger } from '../../utils/logger';
 import { ChainService } from '../chain/chain.service';
@@ -29,8 +29,12 @@ export class NodesService {
         timestamp: dto.timestamp,
       });
 
-      const recoveredAddress = ethers.verifyMessage(message, dto.signature);
-      return recoveredAddress.toLowerCase() === dto.address.toLowerCase();
+      const valid = await verifyMessage({
+        address: dto.address as `0x${string}`,
+        message,
+        signature: dto.signature as `0x${string}`,
+      });
+      return valid;
     } catch (error) {
       this.logger.error('Signature verification failed', error instanceof Error ? error.message : 'Unknown error');
       return false;
@@ -44,7 +48,7 @@ export class NodesService {
         return true;
       }
 
-      const result = await this.chainService.provider.send('agent_isAgentAccount', [address]);
+      const result = await this.chainService.publicClient.request({ method: 'agent_isAgentAccount' as any, params: [address] as any });
       return result === true;
     } catch (error) {
       this.logger.error('Failed to verify agent on-chain', error instanceof Error ? error.message : 'Unknown error');
@@ -180,6 +184,33 @@ export class NodesService {
       }
     } catch (error) {
       this.logger.error('Failed to mark inactive nodes', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  /**
+   * Auto-register a precompile-verified agent as a node if not already in DB.
+   * Called when metrics arrive from an agent verified via agent_isAgentAccount.
+   */
+  async ensureNodeRegistered(address: string): Promise<void> {
+    try {
+      const addr = address.toLowerCase();
+      const existing = await this.nodeRepo.findOne({ where: { address: addr } });
+      if (existing) return;
+
+      const now = String(Math.floor(Date.now() / 1000));
+      const node = this.nodeRepo.create({
+        address: addr,
+        endpoint: '',
+        capabilities: ['inference'],
+        status: 'active',
+        score: 0,
+        lastHeartbeat: now,
+        lastMetricReport: now,
+      });
+      await this.nodeRepo.save(node);
+      this.logger.log(`Auto-registered precompile agent as node: ${addr}`);
+    } catch (error) {
+      this.logger.error('Failed to auto-register node', error instanceof Error ? error.message : 'Unknown error');
     }
   }
 

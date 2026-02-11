@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ethers } from 'ethers';
+import { verifyMessage } from 'viem';
 import { InferenceMetrics } from '../../entities';
 import { Logger } from '../../utils/logger';
 import { ChainService } from '../chain/chain.service';
 import { ReportMetricsDto } from './dto/report-metrics.dto';
 import { NodesService } from '../nodes/nodes.service';
 import { ProofService } from '../proof/proof.service';
+import { SyncService } from '../sync/sync.service';
 
 @Injectable()
 export class MetricsService {
@@ -19,6 +20,7 @@ export class MetricsService {
     private chainService: ChainService,
     private nodesService: NodesService,
     private proofService: ProofService,
+    private syncService: SyncService,
   ) {}
 
   async verifySignature(dto: ReportMetricsDto): Promise<boolean> {
@@ -29,8 +31,12 @@ export class MetricsService {
         timestamp: dto.timestamp,
       });
 
-      const recoveredAddress = ethers.verifyMessage(message, dto.signature);
-      return recoveredAddress.toLowerCase() === dto.wallet.toLowerCase();
+      const valid = await verifyMessage({
+        address: dto.wallet as `0x${string}`,
+        message,
+        signature: dto.signature as `0x${string}`,
+      });
+      return valid;
     } catch (error) {
       this.logger.error('Signature verification failed', error instanceof Error ? error.message : 'Unknown error');
       return false;
@@ -46,6 +52,12 @@ export class MetricsService {
         this.logger.warn(`Rejected metrics from unregistered agent: ${wallet}`);
         return { success: false, shouldReset: false, error: 'Agent not registered on-chain' };
       }
+
+      // Auto-register precompile agent in DB (agents + agent_nodes tables)
+      await Promise.all([
+        this.syncService.ensurePrecompileAgent(wallet),
+        this.nodesService.ensureNodeRegistered(wallet),
+      ]);
 
       if (!this.nodesService.validateTokensProcessed(dto.tokensProcessed)) {
         this.logger.warn(`Rejected metrics from ${wallet}: invalid token count ${dto.tokensProcessed}`);
