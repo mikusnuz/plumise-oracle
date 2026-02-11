@@ -48,7 +48,7 @@ export class NodesService {
         return true;
       }
 
-      const result = await this.chainService.publicClient.request({ method: 'agent_isAgentAccount' as any, params: [address] as any });
+      const result = await this.chainService.publicClient.request({ method: 'agent_isAgentAccount' as any, params: [address, 'latest'] as any });
       return result === true;
     } catch (error) {
       this.logger.error('Failed to verify agent on-chain', error instanceof Error ? error.message : 'Unknown error');
