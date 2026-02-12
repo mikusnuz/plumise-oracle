@@ -323,6 +323,16 @@ export class PipelineService {
     try {
       const cutoffTime = new Date(Date.now() - HEARTBEAT_TIMEOUT_MS);
 
+      // Get stale assignments before deletion
+      const staleAssignments = await this.assignmentRepo.find({
+        where: { updatedAt: LessThan(cutoffTime) },
+      });
+
+      if (staleAssignments.length === 0) {
+        return;
+      }
+
+      // Delete stale assignments
       const result = await this.assignmentRepo
         .createQueryBuilder()
         .delete()
@@ -332,23 +342,16 @@ export class PipelineService {
       if (result.affected && result.affected > 0) {
         this.logger.log(`Removed ${result.affected} stale pipeline assignments`);
 
-        // Get removed assignments before deletion
-        const staleAssignments = await this.assignmentRepo.find({
-          where: { updatedAt: LessThan(cutoffTime) },
-        });
-
         // Emit node left events
         for (const assignment of staleAssignments) {
           this.gateway.emitNodeLeft(assignment.nodeAddress, assignment.modelName);
         }
 
-        // Re-assign layers for affected models
-        const activeModels = await this.assignmentRepo
-          .createQueryBuilder()
-          .select('DISTINCT modelName')
-          .getRawMany();
+        // Get unique affected models
+        const affectedModels = [...new Set(staleAssignments.map(a => a.modelName))];
 
-        for (const { modelName } of activeModels) {
+        // Re-assign layers for affected models
+        for (const modelName of affectedModels) {
           await this.assignLayers(modelName);
         }
       }

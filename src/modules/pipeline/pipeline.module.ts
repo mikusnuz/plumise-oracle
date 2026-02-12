@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PipelineAssignment } from '../../entities/pipeline-assignment.entity';
 import { PipelineService } from './pipeline.service';
 import { PipelineController } from './pipeline.controller';
+import { PipelineGateway } from './pipeline.gateway';
 import { ChainModule } from '../chain/chain.module';
 
 @Module({
@@ -10,8 +11,8 @@ import { ChainModule } from '../chain/chain.module';
     TypeOrmModule.forFeature([PipelineAssignment]),
     ChainModule,
   ],
-  providers: [PipelineService],
+  providers: [PipelineService, PipelineGateway],
   controllers: [PipelineController],
-  exports: [PipelineService],
+  exports: [PipelineService, PipelineGateway],
 })
 export class PipelineModule {}
