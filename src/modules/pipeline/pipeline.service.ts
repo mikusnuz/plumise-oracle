@@ -93,7 +93,7 @@ export class PipelineService {
     }
   }
 
-  async registerNode(dto: RegisterPipelineNodeDto): Promise<{ success: boolean; message: string }> {
+  async registerNode(dto: RegisterPipelineNodeDto): Promise<{ success: boolean; message: string; layerStart?: number; layerEnd?: number; totalLayers?: number }> {
     try {
       const address = dto.address.toLowerCase();
 
