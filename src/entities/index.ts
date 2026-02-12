@@ -6,3 +6,4 @@ export * from './contribution.entity';
 export * from './network-stats.entity';
 export * from './inference-metrics.entity';
 export * from './inference-proof.entity';
+export * from './pipeline-assignment.entity';

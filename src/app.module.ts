@@ -13,7 +13,8 @@ import { ApiModule } from './modules/api/api.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { NodesModule } from './modules/nodes/nodes.module';
 import { ProofModule } from './modules/proof/proof.module';
-import { Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof } from './entities';
+import { PipelineModule } from './modules/pipeline/pipeline.module';
+import { Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof, PipelineAssignment } from './entities';
 import { MonitorService } from './modules/monitor/monitor.service';
 import { ChallengeService } from './modules/challenge/challenge.service';
 import { DistributorService } from './modules/distributor/distributor.service';
@@ -40,7 +41,7 @@ import { join } from 'path';
         username: configService.get('DB_USERNAME', 'root'),
         password: configService.get('DB_PASSWORD', 'plumbug!db!1q2w3e4r'),
         database: configService.get('DB_DATABASE', 'plumise_dashboard'),
-        entities: [Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof],
+        entities: [Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof, PipelineAssignment],
         synchronize: true,
         logging: false,
       }),
@@ -56,6 +57,7 @@ import { join } from 'path';
     MetricsModule,
     NodesModule,
     ProofModule,
+    PipelineModule,
   ],
 })
 export class AppModule implements OnModuleInit {
