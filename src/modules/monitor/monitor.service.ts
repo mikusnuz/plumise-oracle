@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { pad } from 'viem';
+import { pad, formatEther } from 'viem';
 import { ChainService } from '../chain/chain.service';
 import { NodesService } from '../nodes/nodes.service';
 import { Logger } from '../../utils/logger';
 import { chainConfig } from '../../config/chain.config';
 import { plumise } from '@plumise/core';
+
+const AGENT_HEARTBEAT_PRECOMPILE = '0x0000000000000000000000000000000000000022' as const;
+const AGENT_CLAIM_REWARD_PRECOMPILE = '0x0000000000000000000000000000000000000023' as const;
 
 interface AgentInfo {
   address: string;
@@ -180,10 +183,6 @@ export class MonitorService {
             }
           }
 
-          // precompile 0x22에 sponsored heartbeat 전송
-          const AGENT_HEARTBEAT_PRECOMPILE = '0x0000000000000000000000000000000000000022';
-
-          // calldata: agentAddress를 32바이트로 left-pad
           const calldata = pad(agentAddress, { size: 32 });
 
           const txHash = await this.chainService.walletClient.sendTransaction({
@@ -210,6 +209,69 @@ export class MonitorService {
     } catch (error) {
       this.logger.error(
         'Error in sponsored heartbeat cycle',
+        process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
+  }
+
+  @Interval(3600000) // 1시간마다 실행
+  async sendSponsoredClaimRewards() {
+    try {
+      this.logger.debug('Starting sponsored claimReward cycle...');
+
+      const activeNodes = await this.nodesService.getActiveNodes();
+
+      if (activeNodes.length === 0) {
+        this.logger.debug('No active nodes to claim rewards for');
+        return;
+      }
+
+      let successCount = 0;
+      let skipCount = 0;
+      let errorCount = 0;
+
+      for (const node of activeNodes) {
+        try {
+          const agentAddress = node.address as `0x${string}`;
+
+          // on-chain pendingReward 확인
+          const agentMeta = await this.chainService.getAgentMeta(agentAddress);
+
+          if (!agentMeta?.pendingReward || BigInt(agentMeta.pendingReward) === 0n) {
+            this.logger.debug(`Skipping claim for ${agentAddress}: no pending reward`);
+            skipCount++;
+            continue;
+          }
+
+          const pendingReward = BigInt(agentMeta.pendingReward);
+          this.logger.log(`Claiming ${formatEther(pendingReward)} PLM for ${agentAddress}`);
+
+          const calldata = pad(agentAddress, { size: 32 });
+
+          const txHash = await this.chainService.walletClient.sendTransaction({
+            to: AGENT_CLAIM_REWARD_PRECOMPILE,
+            data: calldata,
+            chain: plumise,
+            account: this.chainService.account,
+          });
+
+          this.logger.log(`Sponsored claimReward sent for ${agentAddress}: ${txHash} (${formatEther(pendingReward)} PLM)`);
+          successCount++;
+
+        } catch (error) {
+          this.logger.error(
+            `Failed to send sponsored claimReward for ${node.address}`,
+            error instanceof Error ? error.message : 'Unknown error'
+          );
+          errorCount++;
+        }
+      }
+
+      this.logger.log(`Sponsored claimReward cycle complete: ${successCount} claimed, ${skipCount} skipped, ${errorCount} failed`);
+
+    } catch (error) {
+      this.logger.error(
+        'Error in sponsored claimReward cycle',
         process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error'
       );
     }
