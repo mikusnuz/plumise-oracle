@@ -9,11 +9,9 @@ export class PipelineAssignment {
   id: number;
 
   @Column({ type: 'varchar', length: 42 })
-  @Index()
   nodeAddress: string;
 
   @Column({ type: 'varchar', length: 255 })
-  @Index()
   modelName: string;
 
   @Column({ type: 'int' })
