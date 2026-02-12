@@ -14,6 +14,7 @@ const HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 // Hardcoded model layer counts
 const MODEL_LAYERS: Record<string, number> = {
+  'openai/gpt-oss-20b': 24,
   'bigscience/bloom-560m': 24,
   'meta-llama/Llama-3.1-8B': 32,
 };
@@ -271,10 +272,10 @@ export class PipelineService {
 
       // Multiple nodes: proportional split based on VRAM (or RAM for CPU nodes)
       const weights = activeAssignments.map(a => {
-        if (a.device === 'cpu' || a.vramMb === 0) {
-          return a.ramMb;
+        if (a.device === 'cpu' || Number(a.vramMb) === 0) {
+          return Number(a.ramMb) || 1;
         }
-        return a.vramMb;
+        return Number(a.vramMb) || 1;
       });
 
       const totalWeight = weights.reduce((sum, w) => sum + w, 0);
