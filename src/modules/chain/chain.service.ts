@@ -27,7 +27,7 @@ import { Logger } from '../../utils/logger';
 @Injectable()
 export class ChainService implements OnModuleInit {
   private logger = new Logger('ChainService');
-  private account: Account;
+  public account: Account;
   public publicClient: PublicClient;
   public wsClient: PublicClient;
   public walletClient: WalletClient;

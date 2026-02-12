@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
+import { pad } from 'viem';
 import { ChainService } from '../chain/chain.service';
 import { NodesService } from '../nodes/nodes.service';
 import { Logger } from '../../utils/logger';
 import { chainConfig } from '../../config/chain.config';
+import { plumise } from '@plumise/core';
 
 interface AgentInfo {
   address: string;
@@ -138,5 +140,78 @@ export class MonitorService {
 
   getAllAgents(): AgentInfo[] {
     return Array.from(this.agents.values());
+  }
+
+  @Interval(300000) // 5분마다 실행
+  async sendSponsoredHeartbeats() {
+    try {
+      this.logger.debug('Starting sponsored heartbeat cycle...');
+
+      const activeNodes = await this.nodesService.getActiveNodes();
+
+      if (activeNodes.length === 0) {
+        this.logger.debug('No active nodes to send heartbeat for');
+        return;
+      }
+
+      this.logger.log(`Sending sponsored heartbeats for ${activeNodes.length} agents`);
+
+      let successCount = 0;
+      let skipCount = 0;
+      let errorCount = 0;
+
+      for (const node of activeNodes) {
+        try {
+          const agentAddress = node.address as `0x${string}`;
+
+          // on-chain 마지막 heartbeat 확인
+          const agentMeta = await this.chainService.getAgentMeta(agentAddress);
+
+          if (agentMeta?.lastHeartbeat) {
+            const now = Math.floor(Date.now() / 1000);
+            const lastHeartbeatTime = Number(agentMeta.lastHeartbeat);
+            const timeSinceLastHb = now - lastHeartbeatTime;
+
+            // 5분(300초) 이내면 스킵
+            if (timeSinceLastHb < 300) {
+              this.logger.debug(`Skipping ${agentAddress}: last heartbeat ${timeSinceLastHb}s ago`);
+              skipCount++;
+              continue;
+            }
+          }
+
+          // precompile 0x22에 sponsored heartbeat 전송
+          const AGENT_HEARTBEAT_PRECOMPILE = '0x0000000000000000000000000000000000000022';
+
+          // calldata: agentAddress를 32바이트로 left-pad
+          const calldata = pad(agentAddress, { size: 32 });
+
+          const txHash = await this.chainService.walletClient.sendTransaction({
+            to: AGENT_HEARTBEAT_PRECOMPILE,
+            data: calldata,
+            chain: plumise,
+            account: this.chainService.account,
+          });
+
+          this.logger.log(`Sponsored heartbeat sent for ${agentAddress}: ${txHash}`);
+          successCount++;
+
+        } catch (error) {
+          this.logger.error(
+            `Failed to send sponsored heartbeat for ${node.address}`,
+            error instanceof Error ? error.message : 'Unknown error'
+          );
+          errorCount++;
+        }
+      }
+
+      this.logger.log(`Sponsored heartbeat cycle complete: ${successCount} sent, ${skipCount} skipped, ${errorCount} failed`);
+
+    } catch (error) {
+      this.logger.error(
+        'Error in sponsored heartbeat cycle',
+        process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
   }
 }
