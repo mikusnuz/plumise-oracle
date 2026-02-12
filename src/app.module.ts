@@ -14,6 +14,7 @@ import { MetricsModule } from './modules/metrics/metrics.module';
 import { NodesModule } from './modules/nodes/nodes.module';
 import { ProofModule } from './modules/proof/proof.module';
 import { PipelineModule } from './modules/pipeline/pipeline.module';
+import { WatcherModule } from './modules/watcher/watcher.module';
 import { Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof, PipelineAssignment } from './entities';
 import { MonitorService } from './modules/monitor/monitor.service';
 import { ChallengeService } from './modules/challenge/challenge.service';
@@ -22,6 +23,7 @@ import { SyncService } from './modules/sync/sync.service';
 import { ScorerService } from './modules/scorer/scorer.service';
 import { MetricsService } from './modules/metrics/metrics.service';
 import { ChainService } from './modules/chain/chain.service';
+import { WatcherService } from './modules/watcher/watcher.service';
 import { join } from 'path';
 
 @Module({
@@ -58,6 +60,7 @@ import { join } from 'path';
     NodesModule,
     ProofModule,
     PipelineModule,
+    WatcherModule,
   ],
 })
 export class AppModule implements OnModuleInit {
@@ -69,6 +72,7 @@ export class AppModule implements OnModuleInit {
     @Inject(ScorerService) private scorerService: ScorerService,
     @Inject(MetricsService) private metricsService: MetricsService,
     @Inject(ChainService) private chainService: ChainService,
+    @Inject(WatcherService) private watcherService: WatcherService,
   ) {}
 
   async onModuleInit() {
@@ -77,6 +81,7 @@ export class AppModule implements OnModuleInit {
     this.distributorService.setSyncService(this.syncService);
     this.scorerService.setMetricsService(this.metricsService);
     this.scorerService.setChainService(this.chainService);
+    this.watcherService.setSyncService(this.syncService);
 
     // Initialize services after all modules are ready (ChainService connected)
     await this.challengeService.initialize();

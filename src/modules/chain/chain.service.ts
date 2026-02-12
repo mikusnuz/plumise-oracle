@@ -3,6 +3,7 @@ import {
   createPublicClient,
   createWalletClient,
   http,
+  webSocket,
   getContract,
   type PublicClient,
   type WalletClient,
@@ -28,6 +29,7 @@ export class ChainService implements OnModuleInit {
   private logger = new Logger('ChainService');
   private account: Account;
   public publicClient: PublicClient;
+  public wsClient: PublicClient;
   public walletClient: WalletClient;
   public agentRegistry: GetContractReturnType<typeof agentRegistryAbi, { public: PublicClient; wallet: WalletClient }> | null = null;
   public rewardPool: GetContractReturnType<typeof rewardPoolAbi, { public: PublicClient; wallet: WalletClient }>;
@@ -48,6 +50,15 @@ export class ChainService implements OnModuleInit {
       this.publicClient = createPublicClient({
         chain: plumise,
         transport,
+      });
+
+      const wsTransport = webSocket(chainConfig.wsUrl, {
+        keepAlive: true,
+        reconnect: true,
+      });
+      this.wsClient = createPublicClient({
+        chain: plumise,
+        transport: wsTransport,
       });
 
       this.walletClient = createWalletClient({
@@ -121,5 +132,29 @@ export class ChainService implements OnModuleInit {
       chain: plumise,
       account: this.account,
     } as any);
+  }
+
+  async getAgentMeta(address: string): Promise<any> {
+    try {
+      return await this.publicClient.request({
+        method: 'agent_getAgentMeta' as any,
+        params: [address],
+      });
+    } catch (error) {
+      this.logger.debug(`Failed to get agent meta for ${address}`, error instanceof Error ? error.message : 'Unknown error');
+      return null;
+    }
+  }
+
+  async isAgentAccount(address: string): Promise<boolean> {
+    try {
+      return await this.publicClient.request({
+        method: 'agent_isAgentAccount' as any,
+        params: [address],
+      });
+    } catch (error) {
+      this.logger.debug(`Failed to check agent account for ${address}`, error instanceof Error ? error.message : 'Unknown error');
+      return false;
+    }
   }
 }
