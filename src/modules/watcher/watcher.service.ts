@@ -4,7 +4,9 @@ import { Repository } from 'typeorm';
 import { Agent } from '../../entities';
 import { ChainService } from '../chain/chain.service';
 import { Logger } from '../../utils/logger';
-import { hexToString } from 'viem';
+import { hexToString, keccak256, toBytes } from 'viem';
+
+const REWARD_CLAIMED_TOPIC = keccak256(toBytes('RewardClaimed(address)'));
 
 const PRECOMPILE_ADDRESSES = {
   VERIFY_INFERENCE: '0x0000000000000000000000000000000000000020',
@@ -159,7 +161,8 @@ export class WatcherService implements OnModuleInit {
   private async handleAgentRegister(tx: any, receipt: any) {
     try {
       const input = tx.input as `0x${string}`;
-      if (input.length < 98) {
+      // Min 96 bytes = 192 hex chars + "0x" prefix = 194
+      if (input.length < 194) {
         this.logger.warn(`Invalid agentRegister input length: ${input.length}`);
         return;
       }
@@ -296,23 +299,18 @@ export class WatcherService implements OnModuleInit {
     try {
       const agentAddress = tx.from.toLowerCase();
 
-      let rewardAmount: bigint | null = null;
+      let claimed = false;
       if (receipt.logs && receipt.logs.length > 0) {
         for (const log of receipt.logs) {
-          if (log.topics && log.topics.length >= 3) {
-            const topic0 = log.topics[0];
-            if (topic0 && topic0.toLowerCase().includes('reward')) {
-              const amountHex = log.topics[2];
-              if (amountHex) {
-                rewardAmount = BigInt(amountHex);
-              }
-            }
+          if (log.topics && log.topics.length >= 2 && log.topics[0] === REWARD_CLAIMED_TOPIC) {
+            claimed = true;
+            break;
           }
         }
       }
 
       this.logger.log(`Reward claimed by agent: ${agentAddress}`, {
-        amount: rewardAmount ? rewardAmount.toString() : 'unknown',
+        claimed,
         txHash: tx.hash,
       });
     } catch (error) {

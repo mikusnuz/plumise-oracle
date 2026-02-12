@@ -52,14 +52,20 @@ export class ChainService implements OnModuleInit {
         transport,
       });
 
-      const wsTransport = webSocket(chainConfig.wsUrl, {
-        keepAlive: true,
-        reconnect: true,
-      });
-      this.wsClient = createPublicClient({
-        chain: plumise,
-        transport: wsTransport,
-      });
+      try {
+        const wsTransport = webSocket(chainConfig.wsUrl, {
+          keepAlive: true,
+          reconnect: { attempts: 10, delay: 5_000 },
+        });
+        this.wsClient = createPublicClient({
+          chain: plumise,
+          transport: wsTransport,
+        });
+        this.logger.log(`WebSocket transport: ${chainConfig.wsUrl}`);
+      } catch (error) {
+        this.logger.warn(`WebSocket init failed, using HTTP fallback: ${error instanceof Error ? error.message : 'Unknown'}`);
+        this.wsClient = this.publicClient;
+      }
 
       this.walletClient = createWalletClient({
         account,
@@ -138,8 +144,8 @@ export class ChainService implements OnModuleInit {
     try {
       return await this.publicClient.request({
         method: 'agent_getAgentMeta' as any,
-        params: [address],
-      });
+        params: [address as `0x${string}`],
+      } as any);
     } catch (error) {
       this.logger.debug(`Failed to get agent meta for ${address}`, error instanceof Error ? error.message : 'Unknown error');
       return null;
@@ -150,8 +156,8 @@ export class ChainService implements OnModuleInit {
     try {
       return await this.publicClient.request({
         method: 'agent_isAgentAccount' as any,
-        params: [address],
-      });
+        params: [address as `0x${string}`],
+      } as any);
     } catch (error) {
       this.logger.debug(`Failed to check agent account for ${address}`, error instanceof Error ? error.message : 'Unknown error');
       return false;
