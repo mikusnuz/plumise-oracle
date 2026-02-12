@@ -158,7 +158,18 @@ export class PipelineService {
       // Run layer assignment algorithm for this model
       await this.assignLayers(dto.model);
 
-      return { success: true, message: 'Pipeline node registered successfully' };
+      // Re-fetch assignment to return updated layer range
+      const updated = await this.assignmentRepo.findOne({
+        where: { nodeAddress: address, modelName: dto.model },
+      });
+
+      return {
+        success: true,
+        message: 'Pipeline node registered successfully',
+        layerStart: updated?.layerStart ?? 0,
+        layerEnd: updated?.layerEnd ?? 0,
+        totalLayers: updated?.totalLayers ?? totalLayers,
+      };
     } catch (error) {
       this.logger.error('Failed to register pipeline node', error instanceof Error ? error.message : 'Unknown error');
       return { success: false, message: 'Internal server error' };
