@@ -1,9 +1,10 @@
-import { Entity, Column, PrimaryGeneratedColumn, Index, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, Index, CreateDateColumn, UpdateDateColumn, Unique } from 'typeorm';
 
 @Entity('pipeline_assignments')
 @Index(['nodeAddress'])
 @Index(['modelName'])
 @Index(['ready'])
+@Unique(['nodeAddress', 'modelName']) // OR-06 FIX: Prevent duplicate assignments
 export class PipelineAssignment {
   @PrimaryGeneratedColumn()
   id: number;

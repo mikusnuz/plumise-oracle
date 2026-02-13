@@ -13,6 +13,9 @@ import { SyncService } from '../sync/sync.service';
 @Injectable()
 export class MetricsService {
   private logger = new Logger('MetricsService');
+  private agentLastReportedTokens: Map<string, bigint> = new Map();
+  private agentLastReportedRequests: Map<string, number> = new Map();
+  private scorerService: any; // OR-03 FIX: Scorer service for uptime updates
 
   constructor(
     @InjectRepository(InferenceMetrics)
@@ -23,8 +26,22 @@ export class MetricsService {
     private syncService: SyncService,
   ) {}
 
+  setScorerService(scorerService: any) {
+    this.scorerService = scorerService;
+  }
+
   async verifySignature(dto: ReportMetricsDto): Promise<boolean> {
     try {
+      // OR-02 FIX: Anti-replay protection with timestamp freshness check
+      const now = Math.floor(Date.now() / 1000);
+      const timestampDiff = Math.abs(now - dto.timestamp);
+      const TIMESTAMP_WINDOW_SECONDS = 60;
+
+      if (timestampDiff > TIMESTAMP_WINDOW_SECONDS) {
+        this.logger.warn(`Timestamp outside valid window: ${timestampDiff}s difference for ${dto.wallet}`);
+        return false;
+      }
+
       const message = JSON.stringify({
         agent: dto.wallet,
         processed_tokens: dto.tokensProcessed,
@@ -88,8 +105,40 @@ export class MetricsService {
       const prevRequests = metrics.requestCount;
       const prevLatency = metrics.avgLatencyMs;
 
-      metrics.tokensProcessed = String(prevTokens + BigInt(dto.tokensProcessed));
-      metrics.requestCount = prevRequests + dto.requestCount;
+      // OR-01 FIX: Delta-based accumulation for cumulative metrics
+      const reportedTokens = BigInt(dto.tokensProcessed);
+      const reportedRequests = dto.requestCount;
+
+      const lastReportedTokens = this.agentLastReportedTokens.get(wallet) || BigInt(0);
+      const lastReportedRequests = this.agentLastReportedRequests.get(wallet) || 0;
+
+      // Calculate delta (handle reset if reported < last)
+      let tokenDelta: bigint;
+      let requestDelta: number;
+
+      if (reportedTokens < lastReportedTokens) {
+        // Agent reset detected, treat as full delta
+        tokenDelta = reportedTokens;
+        this.logger.debug(`Agent ${wallet} token reset detected: ${lastReportedTokens} -> ${reportedTokens}`);
+      } else {
+        tokenDelta = reportedTokens - lastReportedTokens;
+      }
+
+      if (reportedRequests < lastReportedRequests) {
+        // Agent reset detected
+        requestDelta = reportedRequests;
+        this.logger.debug(`Agent ${wallet} request reset detected: ${lastReportedRequests} -> ${reportedRequests}`);
+      } else {
+        requestDelta = reportedRequests - lastReportedRequests;
+      }
+
+      // Update last reported values
+      this.agentLastReportedTokens.set(wallet, reportedTokens);
+      this.agentLastReportedRequests.set(wallet, reportedRequests);
+
+      // Accumulate deltas to metrics
+      metrics.tokensProcessed = String(prevTokens + tokenDelta);
+      metrics.requestCount = prevRequests + requestDelta;
 
       if (metrics.requestCount > 0) {
         const totalLatency = prevLatency * prevRequests + dto.avgLatencyMs * dto.requestCount;
@@ -102,6 +151,11 @@ export class MetricsService {
       await this.metricsRepo.save(metrics);
 
       await this.nodesService.updateNodeMetricReport(wallet);
+
+      // OR-03 FIX: Update uptime in scorer service
+      if (this.scorerService) {
+        this.scorerService.updateUptime(wallet, dto.uptimeSeconds);
+      }
 
       if (dto.proofs && dto.proofs.length > 0) {
         try {
@@ -198,5 +252,8 @@ export class MetricsService {
 
   resetEpochMetrics() {
     this.logger.log('Epoch metrics will be preserved in database for historical records');
+    // Clear delta tracking for new epoch
+    this.agentLastReportedTokens.clear();
+    this.agentLastReportedRequests.clear();
   }
 }

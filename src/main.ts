@@ -16,6 +16,13 @@ async function bootstrap() {
       transform: true,
     }));
 
+    // OR-09: TODO - Configure CORS for production
+    // Currently allows all origins for internal network operation
+    // For external exposure, configure specific origins:
+    // app.enableCors({
+    //   origin: ['https://dashboard.plumise.com', 'https://plumise.com'],
+    //   credentials: true,
+    // });
     app.enableCors();
 
     const port = process.env.API_PORT || 15481;

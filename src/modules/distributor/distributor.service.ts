@@ -12,6 +12,7 @@ export class DistributorService {
   private logger = new Logger('DistributorService');
   private lastCheckedEpoch: bigint = 0n;
   private syncService: any;
+  private isRunning: boolean = false; // OR-08 FIX: Prevent job overlap
 
   constructor(
     @InjectRepository(Contribution)
@@ -21,6 +22,13 @@ export class DistributorService {
 
   @Interval(60000) // Check every minute
   async checkAndDistributeRewards() {
+    // OR-08 FIX: Skip if already running
+    if (this.isRunning) {
+      this.logger.debug('Skipping distribution check - previous job still running');
+      return;
+    }
+
+    this.isRunning = true;
     try {
       const currentEpoch = await this.chainService.getCurrentEpoch();
 
@@ -49,6 +57,8 @@ export class DistributorService {
       }
     } catch (error) {
       this.logger.error('Error checking epoch distribution', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      this.isRunning = false;
     }
   }
 

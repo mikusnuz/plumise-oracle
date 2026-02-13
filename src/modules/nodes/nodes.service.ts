@@ -22,6 +22,16 @@ export class NodesService {
 
   async verifyRegistrationSignature(dto: RegisterNodeDto): Promise<boolean> {
     try {
+      // OR-02 FIX: Anti-replay protection with timestamp freshness check
+      const now = Math.floor(Date.now() / 1000);
+      const timestampDiff = Math.abs(now - dto.timestamp);
+      const TIMESTAMP_WINDOW_SECONDS = 60;
+
+      if (timestampDiff > TIMESTAMP_WINDOW_SECONDS) {
+        this.logger.warn(`Timestamp outside valid window: ${timestampDiff}s difference for ${dto.address}`);
+        return false;
+      }
+
       const message = JSON.stringify({
         address: dto.address,
         endpoint: dto.endpoint,

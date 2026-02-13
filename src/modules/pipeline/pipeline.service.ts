@@ -33,6 +33,16 @@ export class PipelineService {
 
   async verifyRegistrationSignature(dto: RegisterPipelineNodeDto): Promise<boolean> {
     try {
+      // OR-02 FIX: Anti-replay protection with timestamp freshness check
+      const now = Math.floor(Date.now() / 1000);
+      const timestampDiff = Math.abs(now - dto.timestamp);
+      const TIMESTAMP_WINDOW_SECONDS = 60;
+
+      if (timestampDiff > TIMESTAMP_WINDOW_SECONDS) {
+        this.logger.warn(`Timestamp outside valid window: ${timestampDiff}s difference for ${dto.address}`);
+        return false;
+      }
+
       const message = JSON.stringify({
         address: dto.address,
         grpcEndpoint: dto.grpcEndpoint,
@@ -58,6 +68,16 @@ export class PipelineService {
 
   async verifyReadySignature(dto: PipelineReadyDto): Promise<boolean> {
     try {
+      // OR-02 FIX: Anti-replay protection with timestamp freshness check
+      const now = Math.floor(Date.now() / 1000);
+      const timestampDiff = Math.abs(now - dto.timestamp);
+      const TIMESTAMP_WINDOW_SECONDS = 60;
+
+      if (timestampDiff > TIMESTAMP_WINDOW_SECONDS) {
+        this.logger.warn(`Timestamp outside valid window: ${timestampDiff}s difference for ${dto.address}`);
+        return false;
+      }
+
       const message = JSON.stringify({
         address: dto.address,
         model: dto.model,
@@ -120,6 +140,9 @@ export class PipelineService {
 
       const totalLayers = MODEL_LAYERS[dto.model] || 32;
 
+      // OR-06 FIX: Use upsert pattern to handle unique constraint properly
+      const isNew = !assignment;
+
       if (!assignment) {
         assignment = this.assignmentRepo.create({
           nodeAddress: address,
@@ -148,8 +171,29 @@ export class PipelineService {
         this.logger.log(`Pipeline node updated: ${address} for ${dto.model}`);
       }
 
-      const isNew = !assignment.id;
-      await this.assignmentRepo.save(assignment);
+      try {
+        await this.assignmentRepo.save(assignment);
+      } catch (error) {
+        // Handle race condition if unique constraint was violated
+        if (error instanceof Error && error.message.includes('Duplicate entry')) {
+          this.logger.warn(`Duplicate pipeline assignment detected, retrying update for ${address}/${dto.model}`);
+          const existing = await this.assignmentRepo.findOne({
+            where: { nodeAddress: address, modelName: dto.model },
+          });
+          if (existing) {
+            existing.grpcEndpoint = dto.grpcEndpoint;
+            existing.httpEndpoint = dto.httpEndpoint;
+            existing.ramMb = dto.ramMb;
+            existing.device = dto.device;
+            existing.vramMb = dto.vramMb;
+            existing.totalLayers = totalLayers;
+            existing.ready = false;
+            await this.assignmentRepo.save(existing);
+          }
+        } else {
+          throw error;
+        }
+      }
 
       // Emit node joined event if new
       if (isNew) {

@@ -36,17 +36,27 @@ import { join } from 'path';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mysql',
-        host: configService.get('DB_HOST', 'localhost'),
-        port: parseInt(configService.get('DB_PORT', '15411')),
-        username: configService.get('DB_USERNAME', 'root'),
-        password: configService.get('DB_PASSWORD', 'plumbug!db!1q2w3e4r'),
-        database: configService.get('DB_DATABASE', 'plumise_dashboard'),
-        entities: [Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof, PipelineAssignment],
-        synchronize: true,
-        logging: false,
-      }),
+      useFactory: (configService: ConfigService) => {
+        // OR-07 FIX: Production-safe defaults
+        const nodeEnv = configService.get('NODE_ENV', 'development');
+        const password = configService.get('DB_PASSWORD', 'plumbug!db!1q2w3e4r');
+
+        if (nodeEnv === 'production' && password === 'plumbug!db!1q2w3e4r') {
+          console.warn('[SECURITY WARNING] Using default database password in production environment!');
+        }
+
+        return {
+          type: 'mysql',
+          host: configService.get('DB_HOST', 'localhost'),
+          port: parseInt(configService.get('DB_PORT', '15411')),
+          username: configService.get('DB_USERNAME', 'root'),
+          password,
+          database: configService.get('DB_DATABASE', 'plumise_dashboard'),
+          entities: [Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof, PipelineAssignment],
+          synchronize: nodeEnv !== 'production', // OR-07 FIX: Disable auto-sync in production
+          logging: false,
+        };
+      },
     }),
     ChainModule,
     SyncModule,
@@ -81,6 +91,7 @@ export class AppModule implements OnModuleInit {
     this.distributorService.setSyncService(this.syncService);
     this.scorerService.setMetricsService(this.metricsService);
     this.scorerService.setChainService(this.chainService);
+    this.metricsService.setScorerService(this.scorerService); // OR-03 FIX
     this.watcherService.setSyncService(this.syncService);
 
     // Initialize services after all modules are ready (ChainService connected)

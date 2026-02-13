@@ -20,6 +20,14 @@ export class ProofService {
     proofDto: InferenceProofDto,
   ): Promise<InferenceProof> {
     try {
+      // OR-05: TODO - Implement cryptographic proof verification
+      // Currently proofs are accepted without verification (verified=false by default)
+      // Future implementation should:
+      // 1. Verify modelHash matches expected model binary hash
+      // 2. Verify outputHash = hash(model(inputHash))
+      // 3. Consider sampling strategy (verify random subset to reduce cost)
+      // 4. Integrate with on-chain verifyInference precompile (0x20)
+
       const proof = this.proofRepo.create({
         agentAddress: agentAddress.toLowerCase(),
         epoch,

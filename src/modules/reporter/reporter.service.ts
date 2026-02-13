@@ -13,6 +13,7 @@ import { chainConfig } from '../../config/chain.config';
 export class ReporterService {
   private logger = new Logger('ReporterService');
   private lastReportBlock: number = 0;
+  private isRunning: boolean = false; // OR-08 FIX: Prevent job overlap
 
   constructor(
     @InjectRepository(Contribution)
@@ -24,6 +25,13 @@ export class ReporterService {
 
   @Interval(60000) // Check every minute
   async checkAndReportContributions() {
+    // OR-08 FIX: Skip if already running
+    if (this.isRunning) {
+      this.logger.debug('Skipping report check - previous job still running');
+      return;
+    }
+
+    this.isRunning = true;
     try {
       const currentBlock = await this.chainService.getCurrentBlock();
 
@@ -40,6 +48,8 @@ export class ReporterService {
       }
     } catch (error) {
       this.logger.error('Error checking report interval', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      this.isRunning = false;
     }
   }
 
@@ -56,18 +66,38 @@ export class ReporterService {
 
       this.logger.log(`Reporting contributions for ${activeAgents.length} agents`);
 
+      // OR-04 FIX: Track successful reports, only reset if all succeed
+      const successfulAgents: string[] = [];
+      const failedAgents: string[] = [];
+
       for (const agent of activeAgents) {
-        await this.reportAgentContribution(agent.address);
+        const success = await this.reportAgentContribution(agent.address);
+        if (success) {
+          successfulAgents.push(agent.address);
+        } else {
+          failedAgents.push(agent.address);
+        }
       }
 
-      this.logger.log('Contribution reporting completed');
-      this.scorerService.resetEpochData();
+      this.logger.log(`Contribution reporting completed: ${successfulAgents.length} succeeded, ${failedAgents.length} failed`);
+
+      if (failedAgents.length > 0) {
+        this.logger.warn(`Failed agents will be retried in next epoch: ${failedAgents.join(', ')}`);
+      }
+
+      // Only reset epoch data if ALL agents succeeded
+      if (failedAgents.length === 0) {
+        this.scorerService.resetEpochData();
+        this.logger.log('Epoch data reset after successful reporting for all agents');
+      } else {
+        this.logger.warn('Epoch data NOT reset due to failures - will retry in next interval');
+      }
     } catch (error) {
       this.logger.error('Error reporting contributions', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
-  async reportAgentContribution(agentAddress: string) {
+  async reportAgentContribution(agentAddress: string): Promise<boolean> {
     try {
       const currentEpoch = Number(await this.chainService.getCurrentEpoch());
       const score = await this.scorerService.getAgentScore(agentAddress);
@@ -100,11 +130,14 @@ export class ReporterService {
       this.logger.debug(`Transaction confirmed: ${txHash}`);
 
       await this.saveContributionToDB(agentAddress, currentEpoch, score);
+
+      return true; // OR-04 FIX: Return success
     } catch (error) {
       this.logger.error(
         `Failed to report contribution for ${agentAddress}`,
         process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error',
       );
+      return false; // OR-04 FIX: Return failure
     }
   }
 
