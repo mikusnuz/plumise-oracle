@@ -13,6 +13,8 @@ const MAX_TOKENS_PER_REPORT = 1_000_000_000; // 1B tokens per report
 @Injectable()
 export class NodesService {
   private logger = new Logger('NodesService');
+  // Re-audit #4 FIX: Monotonic timestamp guard for registration endpoint
+  private lastRegistrationTimestamp: Map<string, number> = new Map();
 
   constructor(
     @InjectRepository(AgentNode)
@@ -70,6 +72,13 @@ export class NodesService {
     try {
       const address = dto.address.toLowerCase();
 
+      // Re-audit #4 FIX: Monotonic timestamp guard prevents replay within the 60s window
+      const lastTs = this.lastRegistrationTimestamp.get(address) || 0;
+      if (dto.timestamp <= lastTs) {
+        this.logger.warn(`Rejected registration replay from ${address}: timestamp ${dto.timestamp} <= last ${lastTs}`);
+        return { success: false, message: 'Replay detected: timestamp must be strictly increasing' };
+      }
+
       const isRegistered = await this.isAgentRegisteredOnChain(address);
       if (!isRegistered) {
         return { success: false, message: 'Address not registered as agent on-chain' };
@@ -100,6 +109,9 @@ export class NodesService {
       }
 
       await this.nodeRepo.save(node);
+
+      // Re-audit #4 FIX: Update monotonic timestamp after successful registration
+      this.lastRegistrationTimestamp.set(address, dto.timestamp);
 
       return { success: true, message: 'Node registered successfully' };
     } catch (error) {

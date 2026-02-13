@@ -37,8 +37,11 @@ export class MetricsService implements OnModuleInit {
       const metrics = await this.metricsRepo.find({ where: { epoch: currentEpoch } });
 
       for (const m of metrics) {
-        this.agentLastReportedTokens.set(m.wallet, BigInt(m.tokensProcessed || '0'));
-        this.agentLastReportedRequests.set(m.wallet, m.requestCount || 0);
+        // Re-audit #1 FIX: Restore from lastRawTokens/lastRawRequests (agent's actual last cumulative),
+        // NOT from tokensProcessed (accumulated delta sum). Using tokensProcessed would cause
+        // false reset detection after Oracle restart if agent had reset mid-epoch.
+        this.agentLastReportedTokens.set(m.wallet, BigInt(m.lastRawTokens || '0'));
+        this.agentLastReportedRequests.set(m.wallet, m.lastRawRequests || 0);
         // Restore monotonic timestamp guard from DB
         const storedTimestamp = parseInt(m.lastUpdated || '0');
         if (storedTimestamp > 0) {
@@ -135,6 +138,8 @@ export class MetricsService implements OnModuleInit {
           requestCount: 0,
           uptimeSeconds: 0,
           lastUpdated: String(Math.floor(Date.now() / 1000)),
+          lastRawTokens: '0',
+          lastRawRequests: 0,
         });
       }
 
@@ -177,6 +182,11 @@ export class MetricsService implements OnModuleInit {
       // Accumulate deltas to metrics
       metrics.tokensProcessed = String(prevTokens + tokenDelta);
       metrics.requestCount = prevRequests + requestDelta;
+
+      // Re-audit #1 FIX: Persist agent's actual last raw cumulative values
+      // These differ from tokensProcessed when agent has reset mid-epoch
+      metrics.lastRawTokens = String(reportedTokens);
+      metrics.lastRawRequests = reportedRequests;
 
       if (metrics.requestCount > 0) {
         const totalLatency = prevLatency * prevRequests + dto.avgLatencyMs * dto.requestCount;

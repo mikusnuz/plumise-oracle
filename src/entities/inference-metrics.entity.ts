@@ -29,6 +29,14 @@ export class InferenceMetrics {
   @Column({ type: 'bigint' })
   lastUpdated: string;
 
+  // Re-audit #1 FIX: Store agent's actual last raw cumulative values
+  // (distinct from tokensProcessed which is the accumulated delta sum)
+  @Column({ type: 'bigint', default: '0' })
+  lastRawTokens: string;
+
+  @Column({ type: 'int', default: 0 })
+  lastRawRequests: number;
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
   updatedAt: Date;
 }

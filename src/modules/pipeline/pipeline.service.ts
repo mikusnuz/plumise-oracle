@@ -22,6 +22,9 @@ const MODEL_LAYERS: Record<string, number> = {
 @Injectable()
 export class PipelineService {
   private logger = new Logger('PipelineService');
+  // Re-audit #4 FIX: Monotonic timestamp guards for registration and ready endpoints
+  private lastRegistrationTimestamp: Map<string, number> = new Map();
+  private lastReadyTimestamp: Map<string, number> = new Map();
 
   constructor(
     @InjectRepository(PipelineAssignment)
@@ -118,6 +121,13 @@ export class PipelineService {
     try {
       const address = dto.address.toLowerCase();
 
+      // Re-audit #4 FIX: Monotonic timestamp guard prevents replay within the 60s window
+      const lastTs = this.lastRegistrationTimestamp.get(address) || 0;
+      if (dto.timestamp <= lastTs) {
+        this.logger.warn(`Rejected pipeline registration replay from ${address}: timestamp ${dto.timestamp} <= last ${lastTs}`);
+        return { success: false, message: 'Replay detected: timestamp must be strictly increasing' };
+      }
+
       // Verify on-chain registration
       const isRegistered = await this.isAgentRegisteredOnChain(address);
       if (!isRegistered) {
@@ -208,6 +218,9 @@ export class PipelineService {
         where: { nodeAddress: address, modelName: dto.model },
       });
 
+      // Re-audit #4 FIX: Update monotonic timestamp after successful registration
+      this.lastRegistrationTimestamp.set(address, dto.timestamp);
+
       return {
         success: true,
         message: 'Pipeline node registered successfully',
@@ -224,6 +237,13 @@ export class PipelineService {
   async markReady(dto: PipelineReadyDto): Promise<{ success: boolean; message: string }> {
     try {
       const address = dto.address.toLowerCase();
+
+      // Re-audit #4 FIX: Monotonic timestamp guard prevents replay within the 60s window
+      const lastTs = this.lastReadyTimestamp.get(address) || 0;
+      if (dto.timestamp <= lastTs) {
+        this.logger.warn(`Rejected pipeline ready replay from ${address}: timestamp ${dto.timestamp} <= last ${lastTs}`);
+        return { success: false, message: 'Replay detected: timestamp must be strictly increasing' };
+      }
 
       // Verify signature
       const validSignature = await this.verifyReadySignature(dto);
@@ -247,6 +267,9 @@ export class PipelineService {
 
       // Emit node status change
       this.gateway.emitNodeStatusChange(address, dto.model, true);
+
+      // Re-audit #4 FIX: Update monotonic timestamp after successful ready
+      this.lastReadyTimestamp.set(address, dto.timestamp);
 
       this.logger.log(`Pipeline node marked as ready: ${address} for ${dto.model}`);
       return { success: true, message: 'Pipeline node marked as ready' };
