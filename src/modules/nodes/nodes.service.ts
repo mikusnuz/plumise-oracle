@@ -1,14 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
-import { verifyMessage } from 'viem';
+import { verifyMessage, pad, toHex } from 'viem';
 import { AgentNode } from '../../entities';
 import { Logger } from '../../utils/logger';
 import { ChainService } from '../chain/chain.service';
 import { RegisterNodeDto } from '../metrics/dto/register-node.dto';
+import { plumise } from '@plumise/core';
 
 const HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_TOKENS_PER_REPORT = 1_000_000_000; // 1B tokens per report
+const AGENT_REGISTER_PRECOMPILE = '0x0000000000000000000000000000000000000021' as const;
 
 @Injectable()
 export class NodesService {
@@ -79,9 +81,19 @@ export class NodesService {
         return { success: false, message: 'Replay detected: timestamp must be strictly increasing' };
       }
 
-      const isRegistered = await this.isAgentRegisteredOnChain(address);
+      let isRegistered = await this.isAgentRegisteredOnChain(address);
       if (!isRegistered) {
-        return { success: false, message: 'Address not registered as agent on-chain' };
+        // Sponsor on-chain registration via precompile 0x21 with beneficiary
+        this.logger.log(`Agent ${address} not on-chain, sponsoring registration...`);
+        const sponsored = await this.sponsorAgentRegistration(address);
+        if (!sponsored) {
+          return { success: false, message: 'Failed to sponsor on-chain registration' };
+        }
+        // Verify registration went through
+        isRegistered = await this.isAgentRegisteredOnChain(address);
+        if (!isRegistered) {
+          return { success: false, message: 'Sponsored registration tx succeeded but agent still not found on-chain' };
+        }
       }
 
       let node = await this.nodeRepo.findOne({ where: { address } });
@@ -206,6 +218,57 @@ export class NodesService {
       }
     } catch (error) {
       this.logger.error('Failed to mark inactive nodes', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  /**
+   * Sponsor on-chain agent registration via precompile 0x21 with beneficiary.
+   * Oracle pays gas and the agent address is registered as beneficiary.
+   *
+   * Calldata format: name(32B) + modelHash(32B) + capCount(32B) + beneficiary(32B)
+   */
+  async sponsorAgentRegistration(address: string): Promise<boolean> {
+    try {
+      const agentAddr = address.toLowerCase() as `0x${string}`;
+
+      // Build calldata: name(32B) + modelHash(32B) + capCount(32B) + beneficiary(32B)
+      const nameSuffix = agentAddr.slice(-8);
+      const nameStr = `agent-${nameSuffix}`;
+      const nameHex = Buffer.from(nameStr.padEnd(32, '\0')).toString('hex');
+      const modelHash = '00'.repeat(32);
+      const capCount = '00'.repeat(32);
+      const beneficiary = pad(agentAddr, { size: 32 }).slice(2); // remove 0x prefix
+
+      const calldata = `0x${nameHex}${modelHash}${capCount}${beneficiary}` as `0x${string}`;
+
+      const txHash = await this.chainService.walletClient.sendTransaction({
+        to: AGENT_REGISTER_PRECOMPILE,
+        data: calldata,
+        chain: plumise,
+        account: this.chainService.account,
+      });
+
+      this.logger.log(`Sponsored registration tx sent for ${agentAddr}: ${txHash}`);
+
+      // Wait for receipt
+      const receipt = await this.chainService.publicClient.waitForTransactionReceipt({
+        hash: txHash,
+        timeout: 30_000,
+      });
+
+      if (receipt.status === 'success') {
+        this.logger.log(`Sponsored registration confirmed for ${agentAddr} in block ${receipt.blockNumber}`);
+        return true;
+      } else {
+        this.logger.error(`Sponsored registration failed (reverted) for ${agentAddr}: ${txHash}`);
+        return false;
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to sponsor registration for ${address}`,
+        error instanceof Error ? error.message : 'Unknown error',
+      );
+      return false;
     }
   }
 
