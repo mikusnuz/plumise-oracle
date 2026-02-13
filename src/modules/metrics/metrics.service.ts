@@ -15,6 +15,7 @@ export class MetricsService implements OnModuleInit {
   private logger = new Logger('MetricsService');
   private agentLastReportedTokens: Map<string, bigint> = new Map();
   private agentLastReportedRequests: Map<string, number> = new Map();
+  private agentLastTimestamp: Map<string, number> = new Map(); // Re-audit #4 FIX: monotonic timestamp guard
   private scorerService: any; // OR-03 FIX: Scorer service for uptime updates
 
   constructor(
@@ -38,6 +39,11 @@ export class MetricsService implements OnModuleInit {
       for (const m of metrics) {
         this.agentLastReportedTokens.set(m.wallet, BigInt(m.tokensProcessed || '0'));
         this.agentLastReportedRequests.set(m.wallet, m.requestCount || 0);
+        // Restore monotonic timestamp guard from DB
+        const storedTimestamp = parseInt(m.lastUpdated || '0');
+        if (storedTimestamp > 0) {
+          this.agentLastTimestamp.set(m.wallet, storedTimestamp);
+        }
       }
 
       if (metrics.length > 0) {
@@ -98,6 +104,15 @@ export class MetricsService implements OnModuleInit {
         this.nodesService.ensureNodeRegistered(wallet),
       ]);
 
+      // Re-audit #4 FIX: Monotonic timestamp guard prevents replay attacks.
+      // Old signed messages (with smaller cumulative values) would trigger false "reset"
+      // detection and inflate token counts. Strict monotonic timestamp blocks this.
+      const lastTimestamp = this.agentLastTimestamp.get(wallet) || 0;
+      if (dto.timestamp <= lastTimestamp) {
+        this.logger.warn(`Rejected replay from ${wallet}: timestamp ${dto.timestamp} <= last accepted ${lastTimestamp}`);
+        return { success: false, shouldReset: false, error: 'Replay detected: timestamp must be strictly increasing' };
+      }
+
       if (!this.nodesService.validateTokensProcessed(dto.tokensProcessed)) {
         this.logger.warn(`Rejected metrics from ${wallet}: invalid token count ${dto.tokensProcessed}`);
         return { success: false, shouldReset: false, error: 'Token count exceeds maximum allowed' };
@@ -154,9 +169,10 @@ export class MetricsService implements OnModuleInit {
         requestDelta = reportedRequests - lastReportedRequests;
       }
 
-      // Update last reported values
+      // Update last reported values and monotonic timestamp
       this.agentLastReportedTokens.set(wallet, reportedTokens);
       this.agentLastReportedRequests.set(wallet, reportedRequests);
+      this.agentLastTimestamp.set(wallet, dto.timestamp);
 
       // Accumulate deltas to metrics
       metrics.tokensProcessed = String(prevTokens + tokenDelta);
@@ -168,7 +184,7 @@ export class MetricsService implements OnModuleInit {
       }
 
       metrics.uptimeSeconds = dto.uptimeSeconds;
-      metrics.lastUpdated = String(Math.floor(Date.now() / 1000));
+      metrics.lastUpdated = String(dto.timestamp); // Store client timestamp for monotonic guard persistence
 
       await this.metricsRepo.save(metrics);
 
