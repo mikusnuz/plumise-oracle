@@ -2,6 +2,8 @@ import { Module, OnModuleInit, Inject } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { ChainModule } from './modules/chain/chain.module';
 import { MonitorModule } from './modules/monitor/monitor.module';
 import { ScorerModule } from './modules/scorer/scorer.module';
@@ -24,6 +26,7 @@ import { ScorerService } from './modules/scorer/scorer.service';
 import { MetricsService } from './modules/metrics/metrics.service';
 import { ChainService } from './modules/chain/chain.service';
 import { WatcherService } from './modules/watcher/watcher.service';
+import { Logger } from './utils/logger';
 import { join } from 'path';
 
 @Module({
@@ -77,7 +80,11 @@ import { join } from 'path';
   ],
 })
 export class AppModule implements OnModuleInit {
+  private logger = new Logger('AppModule');
+
   constructor(
+    @InjectDataSource() private dataSource: DataSource,
+    @Inject(ConfigService) private configService: ConfigService,
     @Inject(MonitorService) private monitorService: MonitorService,
     @Inject(ChallengeService) private challengeService: ChallengeService,
     @Inject(DistributorService) private distributorService: DistributorService,
@@ -89,6 +96,12 @@ export class AppModule implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    // OR-04 FIX: Verify migration state in production before starting
+    const nodeEnv = this.configService.get('NODE_ENV', 'development');
+    if (nodeEnv === 'production') {
+      await this.verifyMigrations();
+    }
+
     this.monitorService.syncService = this.syncService;
     this.challengeService.setSyncService(this.syncService);
     this.distributorService.setSyncService(this.syncService);
@@ -103,6 +116,50 @@ export class AppModule implements OnModuleInit {
       await this.syncService.initialSync();
     } catch (error) {
       // Non-fatal: monitor cycle will populate data over time
+    }
+  }
+
+  private async verifyMigrations(): Promise<void> {
+    try {
+      this.logger.log('Verifying database schema migrations...');
+
+      // Verify agent_nodes table exists (migration 001)
+      const agentNodesCheck = await this.dataSource.query(
+        `SELECT COUNT(*) as count FROM information_schema.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agent_nodes'`,
+      );
+
+      if (agentNodesCheck[0].count === 0) {
+        throw new Error(
+          'MIGRATION FAILED: agent_nodes table does not exist. ' +
+          'Please run migration 001_add_agent_nodes_table.sql',
+        );
+      }
+
+      // Verify inference_metrics has lastRawTokens and lastRawRequests columns (migration 002)
+      const metricsColumnsCheck = await this.dataSource.query(
+        `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'inference_metrics'
+         AND COLUMN_NAME IN ('lastRawTokens', 'lastRawRequests')`,
+      );
+
+      const columnNames = metricsColumnsCheck.map((row: any) => row.COLUMN_NAME);
+
+      if (!columnNames.includes('lastRawTokens') || !columnNames.includes('lastRawRequests')) {
+        throw new Error(
+          'MIGRATION FAILED: inference_metrics table is missing required columns. ' +
+          'Missing columns: ' +
+          (!columnNames.includes('lastRawTokens') ? 'lastRawTokens ' : '') +
+          (!columnNames.includes('lastRawRequests') ? 'lastRawRequests ' : '') +
+          '\nPlease run migration 002_add_inference_metrics_raw_columns.sql',
+        );
+      }
+
+      this.logger.log('Database schema verification passed');
+    } catch (error) {
+      this.logger.error('Database migration verification failed', error instanceof Error ? error.message : 'Unknown error');
+      throw error;
     }
   }
 }

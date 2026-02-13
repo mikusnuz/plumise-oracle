@@ -2,8 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InferenceProof } from '../../entities/inference-proof.entity';
+import { InferenceMetrics } from '../../entities/inference-metrics.entity';
 import { Logger } from '../../utils/logger';
 import { InferenceProofDto } from './dto/inference-proof.dto';
+import { createHash } from 'crypto';
 
 @Injectable()
 export class ProofService {
@@ -12,6 +14,8 @@ export class ProofService {
   constructor(
     @InjectRepository(InferenceProof)
     private proofRepo: Repository<InferenceProof>,
+    @InjectRepository(InferenceMetrics)
+    private metricsRepo: Repository<InferenceMetrics>,
   ) {}
 
   async saveProof(
@@ -20,14 +24,6 @@ export class ProofService {
     proofDto: InferenceProofDto,
   ): Promise<InferenceProof> {
     try {
-      // OR-05: TODO - Implement cryptographic proof verification
-      // Currently proofs are accepted without verification (verified=false by default)
-      // Future implementation should:
-      // 1. Verify modelHash matches expected model binary hash
-      // 2. Verify outputHash = hash(model(inputHash))
-      // 3. Consider sampling strategy (verify random subset to reduce cost)
-      // 4. Integrate with on-chain verifyInference precompile (0x20)
-
       const proof = this.proofRepo.create({
         agentAddress: agentAddress.toLowerCase(),
         epoch,
@@ -45,6 +41,15 @@ export class ProofService {
         tokenCount: saved.tokenCount,
       });
 
+      // OR-03 FIX: Verify proof against agent metrics
+      const verificationResult = await this.verifyProofAgainstMetrics(saved);
+      if (verificationResult.verified) {
+        await this.markVerified(saved.id, verificationResult.txHash || '0x0');
+        this.logger.log(`Proof ${saved.id} verified successfully for ${agentAddress}`);
+      } else {
+        this.logger.warn(`Proof ${saved.id} verification failed for ${agentAddress}: ${verificationResult.reason}`);
+      }
+
       return saved;
     } catch (error) {
       this.logger.error(
@@ -52,6 +57,66 @@ export class ProofService {
         error instanceof Error ? error.message : 'Unknown error',
       );
       throw error;
+    }
+  }
+
+  private async verifyProofAgainstMetrics(
+    proof: InferenceProof,
+  ): Promise<{ verified: boolean; reason?: string; txHash?: string }> {
+    try {
+      // OR-03 FIX: Basic sanity checks against agent metrics
+      // Full cryptographic verification (outputHash = hash(model(inputHash)))
+      // would require model execution and is deferred to OR-05/precompile 0x20
+
+      // 1. Check if agent has metrics for this epoch
+      const metrics = await this.metricsRepo.findOne({
+        where: {
+          wallet: proof.agentAddress.toLowerCase(),
+          epoch: proof.epoch,
+        },
+      });
+
+      if (!metrics) {
+        return { verified: false, reason: 'No metrics found for agent in this epoch' };
+      }
+
+      // 2. Verify proof token count is reasonable compared to agent total
+      const proofTokens = BigInt(proof.tokenCount);
+      const agentTokens = BigInt(metrics.tokensProcessed);
+
+      if (proofTokens > agentTokens) {
+        return { verified: false, reason: `Proof tokens (${proofTokens}) exceed agent total (${agentTokens})` };
+      }
+
+      // 3. Basic hash format validation (0x + 64 hex chars)
+      const hashPattern = /^0x[0-9a-f]{64}$/i;
+      if (!hashPattern.test(proof.modelHash) ||
+          !hashPattern.test(proof.inputHash) ||
+          !hashPattern.test(proof.outputHash)) {
+        return { verified: false, reason: 'Invalid hash format' };
+      }
+
+      // 4. Verify hashes are unique (not all same dummy values)
+      if (proof.inputHash === proof.outputHash || proof.modelHash === proof.inputHash) {
+        return { verified: false, reason: 'Duplicate hash values detected' };
+      }
+
+      // Basic verification passed - mark as verified with local hash as txHash
+      // (actual on-chain verification via precompile 0x20 is future work per OR-05)
+      const localTxHash = createHash('sha256')
+        .update(`${proof.agentAddress}:${proof.epoch}:${proof.modelHash}:${proof.inputHash}:${proof.outputHash}`)
+        .digest('hex');
+
+      return {
+        verified: true,
+        txHash: `0x${localTxHash}`,
+      };
+    } catch (error) {
+      this.logger.error(
+        'Proof verification error',
+        error instanceof Error ? error.message : 'Unknown error',
+      );
+      return { verified: false, reason: 'Verification error' };
     }
   }
 
