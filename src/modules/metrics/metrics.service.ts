@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { verifyMessage } from 'viem';
 import { InferenceMetrics } from '../../entities';
+import { PipelineAssignment } from '../../entities/pipeline-assignment.entity';
 import { Logger } from '../../utils/logger';
 import { ChainService } from '../chain/chain.service';
 import { ReportMetricsDto } from './dto/report-metrics.dto';
@@ -21,6 +22,8 @@ export class MetricsService implements OnModuleInit {
   constructor(
     @InjectRepository(InferenceMetrics)
     private metricsRepo: Repository<InferenceMetrics>,
+    @InjectRepository(PipelineAssignment)
+    private assignmentRepo: Repository<PipelineAssignment>,
     private chainService: ChainService,
     private nodesService: NodesService,
     private proofService: ProofService,
@@ -199,6 +202,15 @@ export class MetricsService implements OnModuleInit {
       await this.metricsRepo.save(metrics);
 
       await this.nodesService.updateNodeMetricReport(wallet);
+
+      // Touch pipeline_assignments.updatedAt so stale detection stays in sync
+      // with metrics heartbeat (unified heartbeat source)
+      await this.assignmentRepo
+        .createQueryBuilder()
+        .update()
+        .set({ updatedAt: () => 'NOW()' })
+        .where('nodeAddress = :addr', { addr: wallet })
+        .execute();
 
       // OR-03 FIX: Update uptime in scorer service
       if (this.scorerService) {
