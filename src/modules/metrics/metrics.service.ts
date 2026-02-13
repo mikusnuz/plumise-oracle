@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { verifyMessage } from 'viem';
@@ -11,7 +11,7 @@ import { ProofService } from '../proof/proof.service';
 import { SyncService } from '../sync/sync.service';
 
 @Injectable()
-export class MetricsService {
+export class MetricsService implements OnModuleInit {
   private logger = new Logger('MetricsService');
   private agentLastReportedTokens: Map<string, bigint> = new Map();
   private agentLastReportedRequests: Map<string, number> = new Map();
@@ -25,6 +25,28 @@ export class MetricsService {
     private proofService: ProofService,
     private syncService: SyncService,
   ) {}
+
+  /**
+   * Re-audit #1 FIX: Restore delta tracking Maps from DB on startup
+   * Prevents double-counting when the Oracle process restarts mid-epoch.
+   */
+  async onModuleInit() {
+    try {
+      const currentEpoch = Number(await this.chainService.getCurrentEpoch());
+      const metrics = await this.metricsRepo.find({ where: { epoch: currentEpoch } });
+
+      for (const m of metrics) {
+        this.agentLastReportedTokens.set(m.wallet, BigInt(m.tokensProcessed || '0'));
+        this.agentLastReportedRequests.set(m.wallet, m.requestCount || 0);
+      }
+
+      if (metrics.length > 0) {
+        this.logger.log(`Restored delta tracking for ${metrics.length} agents from epoch ${currentEpoch}`);
+      }
+    } catch (error) {
+      this.logger.warn('Failed to restore delta tracking from DB (will start fresh)', error instanceof Error ? error.message : '');
+    }
+  }
 
   setScorerService(scorerService: any) {
     this.scorerService = scorerService;

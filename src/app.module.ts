@@ -39,10 +39,13 @@ import { join } from 'path';
       useFactory: (configService: ConfigService) => {
         // OR-07 FIX: Production-safe defaults
         const nodeEnv = configService.get('NODE_ENV', 'development');
-        const password = configService.get('DB_PASSWORD', 'plumbug!db!1q2w3e4r');
+        const password = configService.get('DB_PASSWORD');
 
-        if (nodeEnv === 'production' && password === 'plumbug!db!1q2w3e4r') {
-          console.warn('[SECURITY WARNING] Using default database password in production environment!');
+        if (!password) {
+          if (nodeEnv === 'production') {
+            throw new Error('DB_PASSWORD environment variable is required in production');
+          }
+          console.warn('[DEV] DB_PASSWORD not set, using development default');
         }
 
         return {
@@ -50,7 +53,7 @@ import { join } from 'path';
           host: configService.get('DB_HOST', 'localhost'),
           port: parseInt(configService.get('DB_PORT', '15411')),
           username: configService.get('DB_USERNAME', 'root'),
-          password,
+          password: password || 'plumbug!db!1q2w3e4r',
           database: configService.get('DB_DATABASE', 'plumise_dashboard'),
           entities: [Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof, PipelineAssignment],
           synchronize: nodeEnv !== 'production', // OR-07 FIX: Disable auto-sync in production
