@@ -5,6 +5,8 @@ import {
   http,
   webSocket,
   getContract,
+  keccak256,
+  toBytes,
   type PublicClient,
   type WalletClient,
   type GetContractReturnType,
@@ -162,5 +164,67 @@ export class ChainService implements OnModuleInit {
       this.logger.debug(`Failed to check agent account for ${address}`, error instanceof Error ? error.message : 'Unknown error');
       return false;
     }
+  }
+
+  /**
+   * Sponsor-register an agent on-chain via precompile 0x21.
+   * Oracle pays gas; the agent address is set as beneficiary.
+   * Input: name(32B) + modelHash(32B) + capCount(32B) + beneficiary(32B)
+   */
+  async sponsorRegisterAgent(agentAddress: string, model: string): Promise<`0x${string}`> {
+    const PRECOMPILE_REGISTER = '0x0000000000000000000000000000000000000021' as const;
+
+    // Name: "plumise-agent" right-padded to 32 bytes (hex)
+    const nameHex = Buffer.from('plumise-agent').toString('hex').padEnd(64, '0');
+
+    // Model hash: keccak256 of model string bytes
+    const modelHash = keccak256(toBytes(model)).slice(2); // remove 0x prefix
+
+    // Cap count: 0
+    const capCount = '0'.repeat(64);
+
+    // Beneficiary: agent address left-padded to 32 bytes
+    const beneficiary = agentAddress.toLowerCase().replace('0x', '').padStart(64, '0');
+
+    const data = ('0x' + nameHex + modelHash + capCount + beneficiary) as `0x${string}`;
+
+    const hash = await this.walletClient.sendTransaction({
+      to: PRECOMPILE_REGISTER,
+      data,
+      gas: 300_000n,
+      chain: plumise,
+      account: this.account,
+    });
+
+    this.logger.log(`Sponsor registration tx sent: ${hash} for ${agentAddress}`);
+
+    const receipt = await this.publicClient.waitForTransactionReceipt({ hash, timeout: 30_000 });
+    if (receipt.status !== 'success') {
+      throw new Error(`Sponsor registration tx reverted: ${hash}`);
+    }
+
+    this.logger.log(`Sponsor registration confirmed for ${agentAddress}`);
+    return hash;
+  }
+
+  /**
+   * Send sponsored heartbeat for an agent via precompile 0x22.
+   * Input: agentAddress(32B) — Oracle pays gas on behalf of agent.
+   */
+  async sponsorHeartbeat(agentAddress: string): Promise<`0x${string}`> {
+    const PRECOMPILE_HEARTBEAT = '0x0000000000000000000000000000000000000022' as const;
+
+    const beneficiary = agentAddress.toLowerCase().replace('0x', '').padStart(64, '0');
+    const data = ('0x' + beneficiary) as `0x${string}`;
+
+    const hash = await this.walletClient.sendTransaction({
+      to: PRECOMPILE_HEARTBEAT,
+      data,
+      gas: 100_000n,
+      chain: plumise,
+      account: this.account,
+    });
+
+    return hash;
   }
 }
