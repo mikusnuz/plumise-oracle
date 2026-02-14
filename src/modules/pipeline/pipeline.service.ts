@@ -15,6 +15,7 @@ const HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 // Hardcoded model layer counts
 const MODEL_LAYERS: Record<string, number> = {
   'openai/gpt-oss-20b': 24,
+  'ggml-org/gpt-oss-20b-GGUF': 24,
   'bigscience/bloom-560m': 24,
   'meta-llama/Llama-3.1-8B': 32,
 };
@@ -128,16 +129,27 @@ export class PipelineService {
         return { success: false, message: 'Replay detected: timestamp must be strictly increasing' };
       }
 
-      // Verify on-chain registration
-      const isRegistered = await this.isAgentRegisteredOnChain(address);
-      if (!isRegistered) {
-        return { success: false, message: 'Address not registered as agent on-chain' };
-      }
-
-      // Verify signature
+      // Verify signature first (before any on-chain actions)
       const validSignature = await this.verifyRegistrationSignature(dto);
       if (!validSignature) {
         return { success: false, message: 'Invalid signature' };
+      }
+
+      // Verify on-chain registration; sponsor-register if not yet registered
+      let isRegistered = await this.isAgentRegisteredOnChain(address);
+      if (!isRegistered) {
+        try {
+          this.logger.log(`Agent ${address} not registered on-chain, sponsoring registration...`);
+          await this.chainService.sponsorRegisterAgent(address, dto.model);
+          isRegistered = await this.isAgentRegisteredOnChain(address);
+          if (!isRegistered) {
+            return { success: false, message: 'Sponsor registration tx succeeded but agent still not found on-chain' };
+          }
+          this.logger.log(`Agent ${address} sponsor-registered on-chain successfully`);
+        } catch (error) {
+          this.logger.error(`Sponsor registration failed for ${address}`, error instanceof Error ? error.message : 'Unknown error');
+          return { success: false, message: `Sponsor registration failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+        }
       }
 
       // Find or create assignment
@@ -394,6 +406,39 @@ export class PipelineService {
       this.gateway.emitTopologyChange(model, topology);
     } catch (error) {
       this.logger.error('Failed to assign layers', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  /**
+   * Send sponsored heartbeats for all active pipeline nodes.
+   * Agents with 0 PLM cannot heartbeat themselves, so Oracle does it for them.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async sendSponsoredHeartbeats(): Promise<void> {
+    try {
+      const cutoffTime = new Date(Date.now() - HEARTBEAT_TIMEOUT_MS);
+      const assignments = await this.assignmentRepo.find();
+      const activeAssignments = assignments.filter(a => a.updatedAt > cutoffTime);
+
+      if (activeAssignments.length === 0) return;
+
+      // Deduplicate by address (one heartbeat per agent)
+      const uniqueAddresses = [...new Set(activeAssignments.map(a => a.nodeAddress))];
+
+      for (const addr of uniqueAddresses) {
+        try {
+          await this.chainService.sponsorHeartbeat(addr);
+          this.logger.debug(`Sponsored heartbeat sent for ${addr}`);
+        } catch (error) {
+          this.logger.warn(`Sponsored heartbeat failed for ${addr}: ${error instanceof Error ? error.message : 'Unknown'}`);
+        }
+      }
+
+      if (uniqueAddresses.length > 0) {
+        this.logger.log(`Sent sponsored heartbeats for ${uniqueAddresses.length} agents`);
+      }
+    } catch (error) {
+      this.logger.error('Failed to send sponsored heartbeats', error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
