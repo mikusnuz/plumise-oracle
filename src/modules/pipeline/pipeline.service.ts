@@ -9,6 +9,7 @@ import { ChainService } from '../chain/chain.service';
 import { RegisterPipelineNodeDto } from './dto/register-pipeline-node.dto';
 import { PipelineReadyDto } from './dto/pipeline-ready.dto';
 import { PipelineGateway } from './pipeline.gateway';
+import { NodesService } from '../nodes/nodes.service';
 
 const HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -33,6 +34,7 @@ export class PipelineService {
     private chainService: ChainService,
     @Inject(forwardRef(() => PipelineGateway))
     private gateway: PipelineGateway,
+    private nodesService: NodesService,
   ) {}
 
   async verifyRegistrationSignature(dto: RegisterPipelineNodeDto): Promise<boolean> {
@@ -232,6 +234,9 @@ export class PipelineService {
 
       // Re-audit #4 FIX: Update monotonic timestamp after successful registration
       this.lastRegistrationTimestamp.set(address, dto.timestamp);
+
+      // Ensure agent_nodes entry exists (for dashboard/monitor discovery)
+      await this.nodesService.ensureNodeRegistered(address);
 
       return {
         success: true,
