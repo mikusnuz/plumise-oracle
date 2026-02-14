@@ -5,11 +5,13 @@ import { PipelineService } from './pipeline.service';
 import { PipelineController } from './pipeline.controller';
 import { PipelineGateway } from './pipeline.gateway';
 import { ChainModule } from '../chain/chain.module';
+import { NodesModule } from '../nodes/nodes.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([PipelineAssignment]),
     ChainModule,
+    NodesModule,
   ],
   providers: [PipelineService, PipelineGateway],
   controllers: [PipelineController],
