@@ -146,7 +146,7 @@ export class ChainService implements OnModuleInit {
     try {
       return await this.publicClient.request({
         method: 'agent_getAgentMeta' as any,
-        params: [address as `0x${string}`],
+        params: [address as `0x${string}`, 'latest'],
       } as any);
     } catch (error) {
       this.logger.debug(`Failed to get agent meta for ${address}`, error instanceof Error ? error.message : 'Unknown error');
@@ -158,7 +158,7 @@ export class ChainService implements OnModuleInit {
     try {
       return await this.publicClient.request({
         method: 'agent_isAgentAccount' as any,
-        params: [address as `0x${string}`],
+        params: [address as `0x${string}`, 'latest'],
       } as any);
     } catch (error) {
       this.logger.debug(`Failed to check agent account for ${address}`, error instanceof Error ? error.message : 'Unknown error');
