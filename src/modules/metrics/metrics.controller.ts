@@ -16,13 +16,19 @@ export class MetricsController {
 
   @Post('api/metrics')
   async reportMetricsSimple(@Body() dto: ReportMetricsDto, @Headers('x-api-key') apiKey?: string) {
-    if (apiKey && apiKey !== process.env.ORACLE_API_KEY) {
+    const oracleKey = process.env.ORACLE_API_KEY;
+    const isInternalReport = !!(oracleKey && apiKey === oracleKey);
+
+    if (apiKey && !isInternalReport) {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    const isValid = await this.metricsService.verifySignature(dto);
-    if (!isValid) {
-      throw new UnauthorizedException('Invalid signature');
+    // Internal reports (from inference API with ORACLE_API_KEY) skip signature verification
+    if (!isInternalReport) {
+      const isValid = await this.metricsService.verifySignature(dto);
+      if (!isValid) {
+        throw new UnauthorizedException('Invalid signature');
+      }
     }
 
     const result = await this.metricsService.recordMetrics(dto);
