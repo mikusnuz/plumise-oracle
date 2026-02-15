@@ -104,6 +104,8 @@ export class ReporterService {
       const currentEpoch = Number(await this.chainService.getCurrentEpoch());
       const score = await this.scorerService.getAgentScore(agentAddress);
 
+      // Genesis RewardPool at 0x1000 only has 4-param reportContribution
+      // (6-param overload was added in source but not deployed to genesis bytecode)
       const txHash = await this.chainService.writeContract({
         address: this.chainService.rewardPool.address,
         abi: this.chainService.rewardPool.abi,
@@ -113,8 +115,6 @@ export class ReporterService {
           BigInt(score.taskCount),
           BigInt(score.uptimeSeconds),
           BigInt(score.responseScore),
-          BigInt(score.processedTokens.toString()),
-          BigInt(score.avgLatencyInv),
         ],
       });
 
