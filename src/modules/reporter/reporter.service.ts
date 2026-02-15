@@ -37,17 +37,19 @@ export class ReporterService {
 
       if (this.lastReportBlock === 0) {
         this.lastReportBlock = currentBlock;
+        this.logger.log(`Reporter initialized at block ${currentBlock}, interval=${chainConfig.intervals.reportBlocks} blocks`);
         return;
       }
 
       const blocksSinceLastReport = currentBlock - this.lastReportBlock;
+      this.logger.debug(`Reporter check: block=${currentBlock}, since_last=${blocksSinceLastReport}/${chainConfig.intervals.reportBlocks}`);
 
       if (blocksSinceLastReport >= chainConfig.intervals.reportBlocks) {
         await this.reportAllContributions();
         this.lastReportBlock = currentBlock;
       }
     } catch (error) {
-      this.logger.error('Error checking report interval', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
+      this.logger.error('Error checking report interval', error instanceof Error ? error.message : 'Unknown error');
     } finally {
       this.isRunning = false;
     }
@@ -93,7 +95,7 @@ export class ReporterService {
         this.logger.warn('Epoch data NOT reset due to failures - will retry in next interval');
       }
     } catch (error) {
-      this.logger.error('Error reporting contributions', process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error');
+      this.logger.error('Error reporting contributions', error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -135,7 +137,7 @@ export class ReporterService {
     } catch (error) {
       this.logger.error(
         `Failed to report contribution for ${agentAddress}`,
-        process.env.NODE_ENV !== 'production' && error instanceof Error ? error.stack : error instanceof Error ? error.message : 'Unknown error',
+        error instanceof Error ? error.message : 'Unknown error',
       );
       return false; // OR-04 FIX: Return failure
     }
