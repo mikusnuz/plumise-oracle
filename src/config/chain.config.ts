@@ -1,5 +1,5 @@
 export const chainConfig = {
-  rpcUrl: process.env.RPC_URL || 'https://node-1.plumise.com/rpc',
+  rpcUrl: process.env.RPC_URL || 'https://plug.plumise.com/rpc',
   wsUrl: process.env.WS_URL || 'wss://node-1.plumise.com/ws',
   chainId: parseInt(process.env.CHAIN_ID || '41956'),
   contracts: {
