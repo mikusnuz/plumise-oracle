@@ -30,7 +30,7 @@ async function bootstrap() {
 
     logger.log('Plumise Oracle Service Started');
     logger.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    logger.log(`RPC URL: ${process.env.RPC_URL || 'https://node-1.plumise.com/rpc'}`);
+    logger.log(`RPC URL: ${process.env.RPC_URL || 'https://plug.plumise.com/rpc'}`);
     logger.log(`API Server: http://localhost:${port}`);
 
     process.on('SIGTERM', async () => {

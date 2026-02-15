@@ -91,7 +91,7 @@ yarn install
 
 | 변수 | 기본값 | 설명 |
 |---|---|---|
-| `RPC_URL` | `https://node-1.plumise.com/rpc` | Plumise 체인 RPC 엔드포인트 |
+| `RPC_URL` | `https://plug.plumise.com/rpc/YOUR_PLUG_API_KEY` | Plumise 체인 RPC 엔드포인트 |
 | `WS_URL` | `wss://node-1.plumise.com/ws` | Plumise 체인 WebSocket 엔드포인트 |
 | `CHAIN_ID` | `41956` | Plumise 체인 ID |
 | `ORACLE_PRIVATE_KEY` | -- | **필수.** Oracle 지갑 프라이빗 키 |
