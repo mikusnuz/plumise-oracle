@@ -316,4 +316,52 @@ export class MetricsService implements OnModuleInit {
     this.agentLastReportedTokens.clear();
     this.agentLastReportedRequests.clear();
   }
+
+  async getNetworkThroughputHistory(limit: number = 24): Promise<any[]> {
+    const results = await this.metricsRepo
+      .createQueryBuilder('m')
+      .select('m.epoch', 'epoch')
+      .addSelect('SUM(CAST(m.tokensProcessed AS UNSIGNED))', 'totalTokens')
+      .addSelect('COUNT(DISTINCT m.wallet)', 'agentCount')
+      .addSelect('SUM(m.requestCount)', 'totalRequests')
+      .addSelect('AVG(m.avgLatencyMs)', 'avgLatency')
+      .addSelect('MAX(m.uptimeSeconds)', 'maxUptime')
+      .groupBy('m.epoch')
+      .orderBy('m.epoch', 'DESC')
+      .limit(limit)
+      .getRawMany();
+
+    return results.reverse().map(r => ({
+      epoch: Number(r.epoch),
+      totalTokens: r.totalTokens || '0',
+      agentCount: Number(r.agentCount || 0),
+      totalRequests: Number(r.totalRequests || 0),
+      avgLatency: parseFloat(r.avgLatency || '0').toFixed(2),
+      maxUptime: Number(r.maxUptime || 0),
+      // throughput: tokens per second (if uptime > 0)
+      throughputTokPerSec: Number(r.maxUptime) > 0
+        ? (Number(r.totalTokens || 0) / Number(r.maxUptime)).toFixed(2)
+        : '0.00',
+    }));
+  }
+
+  async getAgentCapacities(): Promise<any[]> {
+    // Get latest epoch metrics for each agent
+    const currentEpoch = Number(await this.chainService.getCurrentEpoch());
+    const metrics = await this.metricsRepo.find({
+      where: { epoch: currentEpoch },
+    });
+
+    return metrics.map(m => ({
+      address: m.wallet,
+      epoch: m.epoch,
+      tokensProcessed: m.tokensProcessed,
+      requestCount: m.requestCount,
+      uptimeSeconds: m.uptimeSeconds,
+      avgLatencyMs: m.avgLatencyMs,
+      throughputTokPerSec: Number(m.uptimeSeconds) > 0
+        ? (Number(m.tokensProcessed) / Number(m.uptimeSeconds)).toFixed(2)
+        : '0.00',
+    }));
+  }
 }

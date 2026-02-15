@@ -112,6 +112,20 @@ export class MetricsController {
     return await this.metricsService.getNetworkMetricsSummary();
   }
 
+  @Get('api/v1/metrics/throughput')
+  async getNetworkThroughput(@Query('limit') limit?: string) {
+    const limitNum = limit ? parseInt(limit) : 24;
+    if (limit && (isNaN(limitNum) || limitNum < 1 || limitNum > 100)) {
+      throw new BadRequestException('Invalid limit (1-100)');
+    }
+    return await this.metricsService.getNetworkThroughputHistory(limitNum);
+  }
+
+  @Get('api/v1/metrics/capacity')
+  async getAgentCapacities() {
+    return await this.metricsService.getAgentCapacities();
+  }
+
   @Post('api/nodes/register')
   async registerNode(@Body() dto: RegisterNodeDto) {
     const isValidSignature = await this.nodesService.verifyRegistrationSignature(dto);
