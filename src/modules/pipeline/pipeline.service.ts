@@ -124,6 +124,14 @@ export class PipelineService {
     try {
       const address = dto.address.toLowerCase();
 
+      // Reject non-pipeline nodes: real pipeline nodes must have separate gRPC and HTTP endpoints
+      // (e.g., gRPC:50051 for layer forwarding, HTTP:31331 for health).
+      // Nodes with grpcEndpoint === httpEndpoint (like agent-app) cannot participate in gRPC pipeline.
+      if (dto.grpcEndpoint && dto.httpEndpoint && dto.grpcEndpoint === dto.httpEndpoint) {
+        this.logger.warn(`Rejected pipeline registration from ${address}: grpcEndpoint === httpEndpoint (not a pipeline node)`);
+        return { success: false, message: 'Pipeline nodes must have separate gRPC and HTTP endpoints' };
+      }
+
       // Re-audit #4 FIX: Monotonic timestamp guard prevents replay within the 60s window
       const lastTs = this.lastRegistrationTimestamp.get(address) || 0;
       if (dto.timestamp <= lastTs) {
@@ -310,7 +318,10 @@ export class PipelineService {
       });
 
       // Filter by recent updates (within heartbeat timeout)
-      const activeAssignments = assignments.filter(a => a.updatedAt > cutoffTime);
+      // Also exclude non-pipeline nodes (grpcEndpoint === httpEndpoint)
+      const activeAssignments = assignments.filter(
+        a => a.updatedAt > cutoffTime && a.grpcEndpoint !== a.httpEndpoint,
+      );
 
       return activeAssignments;
     } catch (error) {
@@ -333,8 +344,10 @@ export class PipelineService {
         },
       });
 
-      // Filter by recent updates
-      const activeAssignments = assignments.filter(a => a.updatedAt > cutoffTime);
+      // Filter by recent updates and exclude non-pipeline nodes (grpcEndpoint === httpEndpoint)
+      const activeAssignments = assignments.filter(
+        a => a.updatedAt > cutoffTime && a.grpcEndpoint !== a.httpEndpoint,
+      );
 
       if (activeAssignments.length === 0) {
         return;
