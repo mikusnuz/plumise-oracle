@@ -323,9 +323,61 @@ export class PipelineService {
         a => a.updatedAt > cutoffTime && a.grpcEndpoint !== a.httpEndpoint,
       );
 
-      return activeAssignments;
+      // Also include standalone agent nodes (agent-app) that serve this model
+      const totalLayers = MODEL_LAYERS[model] || 32;
+      const standaloneNodes = await this.getStandaloneNodes(model, totalLayers, activeAssignments);
+
+      return [...activeAssignments, ...standaloneNodes];
     } catch (error) {
       this.logger.error('Failed to get pipeline topology', error instanceof Error ? error.message : 'Unknown error');
+      return [];
+    }
+  }
+
+  /**
+   * Get standalone agent nodes (e.g. agent-app with full GGUF model) from agent_nodes table.
+   * These serve all layers and are shown alongside pipeline nodes in the topology.
+   */
+  private async getStandaloneNodes(
+    model: string,
+    totalLayers: number,
+    existingPipeline: PipelineAssignment[],
+  ): Promise<PipelineAssignment[]> {
+    try {
+      const activeNodes = await this.nodesService.getActiveNodes();
+      const pipelineAddresses = new Set(existingPipeline.map(a => a.nodeAddress.toLowerCase()));
+
+      const result: PipelineAssignment[] = [];
+      for (const node of activeNodes) {
+        if (pipelineAddresses.has(node.address.toLowerCase())) continue;
+
+        // Check if node serves this model (capabilities contains model name or "inference")
+        const servesModel = node.capabilities?.some(
+          cap => cap === model || cap === 'openai/gpt-oss-20b',
+        );
+        if (!servesModel) continue;
+
+        const virtual = new PipelineAssignment();
+        virtual.nodeAddress = node.address;
+        virtual.modelName = model;
+        virtual.layerStart = 0;
+        virtual.layerEnd = totalLayers;
+        virtual.totalLayers = totalLayers;
+        virtual.grpcEndpoint = `standalone://${node.address}`;
+        virtual.httpEndpoint = node.endpoint || '';
+        virtual.ramMb = 0;
+        virtual.device = 'auto';
+        virtual.vramMb = 0;
+        virtual.ready = true;
+        virtual.pipelineOrder = 999;
+        virtual.createdAt = node.createdAt;
+        virtual.updatedAt = node.updatedAt;
+        result.push(virtual);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to get standalone nodes', error instanceof Error ? error.message : 'Unknown error');
       return [];
     }
   }
