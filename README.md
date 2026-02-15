@@ -97,7 +97,7 @@ Copy `.env.example` to `.env` and configure:
 
 | Variable | Default | Description |
 |---|---|---|
-| `RPC_URL` | `https://node-1.plumise.com/rpc` | Plumise chain RPC endpoint |
+| `RPC_URL` | `https://plug.plumise.com/rpc/YOUR_PLUG_API_KEY` | Plumise chain RPC endpoint |
 | `WS_URL` | `wss://node-1.plumise.com/ws` | Plumise chain WebSocket endpoint |
 | `CHAIN_ID` | `41956` | Plumise chain ID |
 | `ORACLE_PRIVATE_KEY` | -- | **Required.** Oracle wallet private key |
