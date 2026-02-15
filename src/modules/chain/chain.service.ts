@@ -167,6 +167,25 @@ export class ChainService implements OnModuleInit {
   }
 
   /**
+   * Read pendingReward for an agent from RewardPool contract.
+   * Uses getPendingReward(address) view function (selector 0x4df9d6ba).
+   */
+  async getPendingReward(address: string): Promise<bigint> {
+    try {
+      const REWARD_POOL = (chainConfig.contracts.rewardPool || addresses.mainnet.RewardPool) as Address;
+      const result = await this.publicClient.call({
+        to: REWARD_POOL,
+        data: ('0x4df9d6ba' + address.toLowerCase().replace('0x', '').padStart(64, '0')) as `0x${string}`,
+      });
+      if (!result.data || result.data === '0x') return 0n;
+      return BigInt(result.data);
+    } catch (error) {
+      this.logger.debug(`Failed to get pending reward for ${address}`, error instanceof Error ? error.message : 'Unknown error');
+      return 0n;
+    }
+  }
+
+  /**
    * Sponsor-register an agent on-chain via precompile 0x21.
    * Oracle pays gas; the agent address is set as beneficiary.
    * Input: name(32B) + modelHash(32B) + capCount(32B) + beneficiary(32B)

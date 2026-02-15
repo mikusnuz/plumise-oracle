@@ -235,15 +235,13 @@ export class MonitorService {
           const agentAddress = node.address as `0x${string}`;
 
           // on-chain pendingReward 확인
-          const agentMeta = await this.chainService.getAgentMeta(agentAddress);
+          const pendingReward = await this.chainService.getPendingReward(agentAddress);
 
-          if (!agentMeta?.pendingReward || BigInt(agentMeta.pendingReward) === 0n) {
+          if (pendingReward === 0n) {
             this.logger.debug(`Skipping claim for ${agentAddress}: no pending reward`);
             skipCount++;
             continue;
           }
-
-          const pendingReward = BigInt(agentMeta.pendingReward);
           this.logger.log(`Claiming ${formatEther(pendingReward)} PLM for ${agentAddress}`);
 
           const calldata = pad(agentAddress, { size: 32 });
