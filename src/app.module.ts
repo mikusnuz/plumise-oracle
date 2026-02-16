@@ -156,6 +156,21 @@ export class AppModule implements OnModuleInit {
         );
       }
 
+      // Verify pipeline_assignments has benchmarkTokPerSec column (migration 003)
+      const pipelineColumnsCheck = await this.dataSource.query(
+        `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'pipeline_assignments'
+         AND COLUMN_NAME = 'benchmarkTokPerSec'`,
+      );
+
+      if (pipelineColumnsCheck.length === 0) {
+        this.logger.warn(
+          'MIGRATION WARNING: pipeline_assignments.benchmarkTokPerSec column missing. ' +
+          'Run: ALTER TABLE pipeline_assignments ADD COLUMN benchmarkTokPerSec FLOAT DEFAULT 0;',
+        );
+      }
+
       this.logger.log('Database schema verification passed');
     } catch (error) {
       this.logger.error('Database migration verification failed', error instanceof Error ? error.message : 'Unknown error');

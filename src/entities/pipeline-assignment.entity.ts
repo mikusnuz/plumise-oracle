@@ -39,6 +39,9 @@ export class PipelineAssignment {
   @Column({ type: 'bigint', default: 0 })
   vramMb: number;
 
+  @Column({ type: 'float', default: 0 })
+  benchmarkTokPerSec: number;
+
   @Column({ type: 'boolean', default: false })
   ready: boolean;
 

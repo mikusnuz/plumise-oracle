@@ -1,4 +1,4 @@
-import { IsEthereumAddress, IsString, IsNumber, IsUrl, Min } from 'class-validator';
+import { IsEthereumAddress, IsString, IsNumber, IsUrl, Min, IsOptional } from 'class-validator';
 
 export class RegisterPipelineNodeDto {
   @IsEthereumAddress()
@@ -23,6 +23,11 @@ export class RegisterPipelineNodeDto {
   @IsNumber()
   @Min(0)
   vramMb: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  benchmarkTokPerSec?: number;
 
   @IsNumber()
   @Min(0)

@@ -346,22 +346,32 @@ export class MetricsService implements OnModuleInit {
   }
 
   async getAgentCapacities(): Promise<any[]> {
-    // Get latest epoch metrics for each agent
     const currentEpoch = Number(await this.chainService.getCurrentEpoch());
     const metrics = await this.metricsRepo.find({
       where: { epoch: currentEpoch },
     });
 
-    return metrics.map(m => ({
-      address: m.wallet,
-      epoch: m.epoch,
-      tokensProcessed: m.tokensProcessed,
-      requestCount: m.requestCount,
-      uptimeSeconds: m.uptimeSeconds,
-      avgLatencyMs: m.avgLatencyMs,
-      throughputTokPerSec: Number(m.uptimeSeconds) > 0
-        ? (Number(m.tokensProcessed) / Number(m.uptimeSeconds)).toFixed(2)
-        : '0.00',
-    }));
+    // Fetch assignments for hardware info
+    const assignments = await this.assignmentRepo.find();
+    const assignmentMap = new Map(assignments.map(a => [a.nodeAddress.toLowerCase(), a]));
+
+    return metrics.map(m => {
+      const assignment = assignmentMap.get(m.wallet.toLowerCase());
+      return {
+        address: m.wallet,
+        epoch: m.epoch,
+        tokensProcessed: m.tokensProcessed,
+        requestCount: m.requestCount,
+        uptimeSeconds: m.uptimeSeconds,
+        avgLatencyMs: m.avgLatencyMs,
+        throughputTokPerSec: Number(m.uptimeSeconds) > 0
+          ? (Number(m.tokensProcessed) / Number(m.uptimeSeconds)).toFixed(2)
+          : '0.00',
+        benchmarkTokPerSec: assignment?.benchmarkTokPerSec ?? 0,
+        device: assignment?.device ?? 'unknown',
+        ramMb: assignment?.ramMb ?? 0,
+        vramMb: assignment?.vramMb ?? 0,
+      };
+    });
   }
 }

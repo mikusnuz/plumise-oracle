@@ -184,6 +184,7 @@ export class PipelineService {
           ramMb: dto.ramMb,
           device: dto.device,
           vramMb: dto.vramMb,
+          benchmarkTokPerSec: dto.benchmarkTokPerSec ?? 0,
           totalLayers,
           layerStart: 0,
           layerEnd: 0,
@@ -198,6 +199,7 @@ export class PipelineService {
         assignment.ramMb = dto.ramMb;
         assignment.device = dto.device;
         assignment.vramMb = dto.vramMb;
+        if (dto.benchmarkTokPerSec !== undefined) assignment.benchmarkTokPerSec = dto.benchmarkTokPerSec;
         assignment.totalLayers = totalLayers;
         assignment.ready = false;
         this.logger.log(`Pipeline node updated: ${address} for ${dto.model}`);
@@ -218,6 +220,7 @@ export class PipelineService {
             existing.ramMb = dto.ramMb;
             existing.device = dto.device;
             existing.vramMb = dto.vramMb;
+            if (dto.benchmarkTokPerSec !== undefined) existing.benchmarkTokPerSec = dto.benchmarkTokPerSec;
             existing.totalLayers = totalLayers;
             existing.ready = false;
             await this.assignmentRepo.save(existing);
