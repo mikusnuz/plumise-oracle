@@ -110,6 +110,7 @@ export class NodesService {
           lastHeartbeat: now,
           lastMetricReport: now,
           registrationSignature: dto.signature,
+          benchmarkTokPerSec: dto.benchmarkTokPerSec ?? 0,
         });
         this.logger.log(`New node registered: ${address}`);
       } else {
@@ -117,6 +118,9 @@ export class NodesService {
         node.capabilities = dto.capabilities;
         node.status = 'active';
         node.lastHeartbeat = now;
+        if (dto.benchmarkTokPerSec !== undefined) {
+          node.benchmarkTokPerSec = dto.benchmarkTokPerSec;
+        }
         this.logger.log(`Node updated: ${address}`);
       }
 

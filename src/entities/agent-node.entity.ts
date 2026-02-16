@@ -28,6 +28,9 @@ export class AgentNode {
   @Column({ type: 'varchar', length: 132, nullable: true, comment: 'Registration signature' })
   registrationSignature: string;
 
+  @Column({ type: 'float', default: 0, comment: 'Self-reported benchmark tok/s' })
+  benchmarkTokPerSec: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

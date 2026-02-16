@@ -1,4 +1,4 @@
-import { IsEthereumAddress, IsString, IsArray, IsUrl, IsNumber, Min } from 'class-validator';
+import { IsEthereumAddress, IsString, IsArray, IsUrl, IsNumber, Min, IsOptional } from 'class-validator';
 
 export class RegisterNodeDto {
   @IsEthereumAddress()
@@ -17,4 +17,9 @@ export class RegisterNodeDto {
 
   @IsString()
   signature: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  benchmarkTokPerSec?: number;
 }

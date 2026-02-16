@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { pad } from 'viem';
+import { plumise } from '@plumise/core';
 import { ChainService } from '../chain/chain.service';
 import { MonitorService } from '../monitor/monitor.service';
 import { ScorerService } from '../scorer/scorer.service';
@@ -130,6 +132,19 @@ export class ReporterService {
 
       await this.chainService.publicClient.waitForTransactionReceipt({ hash: txHash });
       this.logger.debug(`Transaction confirmed: ${txHash}`);
+
+      // Piggyback heartbeat: update on-chain lastHeartbeat during contribution report
+      try {
+        const heartbeatTxHash = await this.chainService.walletClient.sendTransaction({
+          to: '0x0000000000000000000000000000000000000022' as `0x${string}`,
+          data: pad(agentAddress as `0x${string}`, { size: 32 }),
+          chain: plumise,
+          account: this.chainService.account,
+        });
+        this.logger.debug(`Heartbeat piggybacked for ${agentAddress}: ${heartbeatTxHash}`);
+      } catch (hbError) {
+        this.logger.warn(`Heartbeat piggyback failed for ${agentAddress}: ${hbError instanceof Error ? hbError.message : 'Unknown'}`);
+      }
 
       await this.saveContributionToDB(agentAddress, currentEpoch, score);
 
