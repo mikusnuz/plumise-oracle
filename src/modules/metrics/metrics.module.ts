@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { InferenceMetrics } from '../../entities';
+import { InferenceMetrics, AgentNode } from '../../entities';
 import { PipelineAssignment } from '../../entities/pipeline-assignment.entity';
 import { MetricsService } from './metrics.service';
 import { MetricsController } from './metrics.controller';
@@ -9,7 +9,7 @@ import { NodesModule } from '../nodes/nodes.module';
 import { ProofModule } from '../proof/proof.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([InferenceMetrics, PipelineAssignment]), ChainModule, NodesModule, ProofModule],
+  imports: [TypeOrmModule.forFeature([InferenceMetrics, PipelineAssignment, AgentNode]), ChainModule, NodesModule, ProofModule],
   controllers: [MetricsController],
   providers: [MetricsService],
   exports: [MetricsService],
