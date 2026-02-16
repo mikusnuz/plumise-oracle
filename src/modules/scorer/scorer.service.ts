@@ -70,6 +70,34 @@ export class ScorerService {
     );
   }
 
+  calculateScoreV3(params: {
+    verifiedTokens: number;
+    modelMultiplier: number;
+    clusterSize: number;
+    modelMinMemMb: number;
+    nodeMaxMemMb: number;
+    successRate: number;
+    targetP95ms: number;
+    actualP95ms: number;
+  }): number {
+    const multiplier = params.modelMultiplier / 100;
+
+    const need = Math.max(
+      0,
+      Math.min(1, (params.modelMinMemMb - params.nodeMaxMemMb) / params.modelMinMemMb),
+    );
+    const clusterExtra = 0.12 * Math.min(params.clusterSize - 1, 5) * need;
+    const clusterBonus = 1 + clusterExtra;
+
+    const ucu = params.verifiedTokens * multiplier * clusterBonus;
+
+    const reliability = Math.pow(Math.max(0, Math.min(1, params.successRate)), 2);
+
+    const latencyFactor = Math.max(0.5, Math.min(1.2, params.targetP95ms / params.actualP95ms));
+
+    return Math.floor(ucu * reliability * latencyFactor);
+  }
+
   recordTask(agentAddress: string, challengeId: number, solveTime: number) {
     const tasks = this.agentTasks.get(agentAddress) || [];
     tasks.push({

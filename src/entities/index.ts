@@ -7,3 +7,5 @@ export * from './network-stats.entity';
 export * from './inference-metrics.entity';
 export * from './inference-proof.entity';
 export * from './pipeline-assignment.entity';
+export * from './model-registry.entity';
+export * from './model-hash.entity';

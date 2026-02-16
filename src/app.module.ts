@@ -19,7 +19,8 @@ import { PipelineModule } from './modules/pipeline/pipeline.module';
 import { WatcherModule } from './modules/watcher/watcher.module';
 import { ClusterModule } from './modules/cluster/cluster.module';
 import { ClusterService } from './modules/cluster/cluster.service';
-import { Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof, PipelineAssignment } from './entities';
+import { ModelRegistryModule } from './modules/model-registry/model-registry.module';
+import { Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof, PipelineAssignment, ModelRegistry, ModelHash } from './entities';
 import { NodesService } from './modules/nodes/nodes.service';
 import { MonitorService } from './modules/monitor/monitor.service';
 import { ChallengeService } from './modules/challenge/challenge.service';
@@ -61,7 +62,7 @@ import { join } from 'path';
           username: configService.get('DB_USERNAME', 'root'),
           password: password || 'plumbug!db!1q2w3e4r',
           database: configService.get('DB_DATABASE', 'plumise_dashboard'),
-          entities: [Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof, PipelineAssignment],
+          entities: [Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof, PipelineAssignment, ModelRegistry, ModelHash],
           synchronize: nodeEnv !== 'production', // OR-07 FIX: Disable auto-sync in production
           logging: false,
         };
@@ -81,6 +82,7 @@ import { join } from 'path';
     PipelineModule,
     WatcherModule,
     ClusterModule,
+    ModelRegistryModule,
   ],
 })
 export class AppModule implements OnModuleInit {
