@@ -25,7 +25,7 @@ export class AgentNode {
   @Column({ type: 'bigint', comment: 'Unix timestamp of last metric report' })
   lastMetricReport: string;
 
-  @Column({ type: 'varchar', length: 66, nullable: true, comment: 'Registration signature' })
+  @Column({ type: 'varchar', length: 132, nullable: true, comment: 'Registration signature' })
   registrationSignature: string;
 
   @CreateDateColumn()
