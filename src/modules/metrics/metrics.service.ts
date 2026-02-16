@@ -361,10 +361,16 @@ export class MetricsService implements OnModuleInit {
     const agentNodes = await this.agentNodeRepo.find();
     const agentNodeMap = new Map(agentNodes.map(n => [n.address.toLowerCase(), n]));
 
-    return metrics.map(m => {
-      const assignment = assignmentMap.get(m.wallet.toLowerCase());
-      const agentNode = agentNodeMap.get(m.wallet.toLowerCase());
-      return {
+    const result: any[] = [];
+    const seen = new Set<string>();
+
+    // Include nodes that have metrics in current epoch
+    for (const m of metrics) {
+      const addr = m.wallet.toLowerCase();
+      seen.add(addr);
+      const assignment = assignmentMap.get(addr);
+      const agentNode = agentNodeMap.get(addr);
+      result.push({
         address: m.wallet,
         epoch: m.epoch,
         tokensProcessed: m.tokensProcessed,
@@ -379,7 +385,31 @@ export class MetricsService implements OnModuleInit {
         device: assignment?.device ?? 'unknown',
         ramMb: assignment?.ramMb ?? 0,
         vramMb: assignment?.vramMb ?? 0,
-      };
-    });
+      });
+    }
+
+    // Also include active agent nodes with benchmarks that don't have metrics yet
+    for (const node of agentNodes) {
+      const addr = node.address.toLowerCase();
+      if (seen.has(addr)) continue;
+      if (!node.benchmarkTokPerSec || node.benchmarkTokPerSec <= 0) continue;
+
+      const assignment = assignmentMap.get(addr);
+      result.push({
+        address: node.address,
+        epoch: currentEpoch,
+        tokensProcessed: '0',
+        requestCount: 0,
+        uptimeSeconds: 0,
+        avgLatencyMs: 0,
+        throughputTokPerSec: '0.00',
+        benchmarkTokPerSec: node.benchmarkTokPerSec,
+        device: assignment?.device ?? 'unknown',
+        ramMb: assignment?.ramMb ?? 0,
+        vramMb: assignment?.vramMb ?? 0,
+      });
+    }
+
+    return result;
   }
 }

@@ -147,6 +147,7 @@ export class MetricsController {
     return {
       success: true,
       message: result.message,
+      ...(result.assignment && { assignment: result.assignment }),
     };
   }
 
