@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { verifyMessage, pad, toHex } from 'viem';
@@ -7,6 +7,13 @@ import { Logger } from '../../utils/logger';
 import { ChainService } from '../chain/chain.service';
 import { RegisterNodeDto } from '../metrics/dto/register-node.dto';
 import { plumise } from '@plumise/core';
+
+export interface ClusterAssignment {
+  mode: 'standalone' | 'rpc-server' | 'coordinator';
+  clusterId: string | null;
+  rpcPort: number;
+  rpcPeers: string[] | null; // coordinator only: list of "lanIp:rpcPort"
+}
 
 const HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_TOKENS_PER_REPORT = 1_000_000_000; // 1B tokens per report
@@ -17,12 +24,18 @@ export class NodesService {
   private logger = new Logger('NodesService');
   // Re-audit #4 FIX: Monotonic timestamp guard for registration endpoint
   private lastRegistrationTimestamp: Map<string, number> = new Map();
+  // Set via setter to avoid circular dependency with ClusterModule
+  private clusterService: { getNodeAssignment(address: string): Promise<ClusterAssignment | undefined> } | null = null;
 
   constructor(
     @InjectRepository(AgentNode)
     private nodeRepo: Repository<AgentNode>,
     private chainService: ChainService,
   ) {}
+
+  setClusterService(service: { getNodeAssignment(address: string): Promise<ClusterAssignment | undefined> }): void {
+    this.clusterService = service;
+  }
 
   async verifyRegistrationSignature(dto: RegisterNodeDto): Promise<boolean> {
     try {
@@ -70,7 +83,7 @@ export class NodesService {
     }
   }
 
-  async registerNode(dto: RegisterNodeDto): Promise<{ success: boolean; message: string }> {
+  async registerNode(dto: RegisterNodeDto): Promise<{ success: boolean; message: string; assignment?: ClusterAssignment }> {
     try {
       const address = dto.address.toLowerCase();
 
@@ -111,6 +124,8 @@ export class NodesService {
           lastMetricReport: now,
           registrationSignature: dto.signature,
           benchmarkTokPerSec: dto.benchmarkTokPerSec ?? 0,
+          lanIp: dto.lanIp ?? null,
+          canDistribute: dto.canDistribute ?? false,
         });
         this.logger.log(`New node registered: ${address}`);
       } else {
@@ -121,6 +136,12 @@ export class NodesService {
         if (dto.benchmarkTokPerSec !== undefined) {
           node.benchmarkTokPerSec = dto.benchmarkTokPerSec;
         }
+        if (dto.lanIp !== undefined) {
+          node.lanIp = dto.lanIp;
+        }
+        if (dto.canDistribute !== undefined) {
+          node.canDistribute = dto.canDistribute;
+        }
         this.logger.log(`Node updated: ${address}`);
       }
 
@@ -129,7 +150,13 @@ export class NodesService {
       // Re-audit #4 FIX: Update monotonic timestamp after successful registration
       this.lastRegistrationTimestamp.set(address, dto.timestamp);
 
-      return { success: true, message: 'Node registered successfully' };
+      // Build cluster assignment from ClusterService if available
+      let assignment: ClusterAssignment | undefined;
+      if (this.clusterService) {
+        assignment = await this.clusterService.getNodeAssignment(address);
+      }
+
+      return { success: true, message: 'Node registered successfully', assignment };
     } catch (error) {
       this.logger.error('Failed to register node', error instanceof Error ? error.message : 'Unknown error');
       return { success: false, message: 'Internal server error' };

@@ -31,6 +31,12 @@ export class AgentNode {
   @Column({ type: 'float', default: 0, comment: 'Self-reported benchmark tok/s' })
   benchmarkTokPerSec: number;
 
+  @Column({ type: 'varchar', length: 255, nullable: true, comment: 'LAN IP for cluster grouping' })
+  lanIp: string | null;
+
+  @Column({ type: 'boolean', default: false, comment: 'Opt-in for distributed inference' })
+  canDistribute: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -17,7 +17,10 @@ import { NodesModule } from './modules/nodes/nodes.module';
 import { ProofModule } from './modules/proof/proof.module';
 import { PipelineModule } from './modules/pipeline/pipeline.module';
 import { WatcherModule } from './modules/watcher/watcher.module';
+import { ClusterModule } from './modules/cluster/cluster.module';
+import { ClusterService } from './modules/cluster/cluster.service';
 import { Agent, AgentNode, Challenge, Epoch, Contribution, NetworkStats, InferenceMetrics, InferenceProof, PipelineAssignment } from './entities';
+import { NodesService } from './modules/nodes/nodes.service';
 import { MonitorService } from './modules/monitor/monitor.service';
 import { ChallengeService } from './modules/challenge/challenge.service';
 import { DistributorService } from './modules/distributor/distributor.service';
@@ -77,6 +80,7 @@ import { join } from 'path';
     ProofModule,
     PipelineModule,
     WatcherModule,
+    ClusterModule,
   ],
 })
 export class AppModule implements OnModuleInit {
@@ -85,6 +89,8 @@ export class AppModule implements OnModuleInit {
   constructor(
     @InjectDataSource() private dataSource: DataSource,
     @Inject(ConfigService) private configService: ConfigService,
+    @Inject(NodesService) private nodesService: NodesService,
+    @Inject(ClusterService) private clusterService: ClusterService,
     @Inject(MonitorService) private monitorService: MonitorService,
     @Inject(ChallengeService) private challengeService: ChallengeService,
     @Inject(DistributorService) private distributorService: DistributorService,
@@ -102,6 +108,7 @@ export class AppModule implements OnModuleInit {
       await this.verifyMigrations();
     }
 
+    this.nodesService.setClusterService(this.clusterService);
     this.monitorService.syncService = this.syncService;
     this.challengeService.setSyncService(this.syncService);
     this.distributorService.setSyncService(this.syncService);

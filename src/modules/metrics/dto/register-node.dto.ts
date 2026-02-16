@@ -22,4 +22,11 @@ export class RegisterNodeDto {
   @IsNumber()
   @Min(0)
   benchmarkTokPerSec?: number;
+
+  @IsOptional()
+  @IsString()
+  lanIp?: string;
+
+  @IsOptional()
+  canDistribute?: boolean;
 }

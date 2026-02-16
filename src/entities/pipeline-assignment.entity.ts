@@ -48,6 +48,18 @@ export class PipelineAssignment {
   @Column({ type: 'int', default: 0 })
   pipelineOrder: number;
 
+  @Column({ type: 'varchar', length: 50, default: 'standalone' })
+  nodeMode: string; // 'standalone' | 'rpc-server' | 'coordinator'
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  clusterId: string | null;
+
+  @Column({ type: 'int', default: 50052 })
+  rpcPort: number;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  lanIp: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
