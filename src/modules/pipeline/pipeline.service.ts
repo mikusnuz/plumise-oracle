@@ -17,6 +17,8 @@ const HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const MODEL_LAYERS: Record<string, number> = {
   'openai/gpt-oss-20b': 24,
   'ggml-org/gpt-oss-20b-GGUF': 24,
+  'qwen/qwen3-32b': 64,
+  'qwen/qwen3.5-397b-a17b': 96,
 };
 
 @Injectable()
