@@ -133,17 +133,24 @@ export class ReporterService {
       await this.chainService.publicClient.waitForTransactionReceipt({ hash: txHash });
       this.logger.debug(`Transaction confirmed: ${txHash}`);
 
-      // Piggyback heartbeat: update on-chain lastHeartbeat during contribution report
-      try {
-        const heartbeatTxHash = await this.chainService.walletClient.sendTransaction({
-          to: '0x0000000000000000000000000000000000000022' as `0x${string}`,
-          data: pad(agentAddress as `0x${string}`, { size: 32 }),
-          chain: plumise,
-          account: this.chainService.account,
-        });
-        this.logger.debug(`Heartbeat piggybacked for ${agentAddress}: ${heartbeatTxHash}`);
-      } catch (hbError) {
-        this.logger.warn(`Heartbeat piggyback failed for ${agentAddress}: ${hbError instanceof Error ? hbError.message : 'Unknown'}`);
+      // Piggyback heartbeat only for agents that did real work.
+      // Idle agents (no tasks, no tokens) should not get artificial heartbeats,
+      // so they naturally become inactive via the 5-min heartbeat timeout.
+      const hasWork = score.taskCount > 0 || score.processedTokens > BigInt(0);
+      if (hasWork) {
+        try {
+          const heartbeatTxHash = await this.chainService.walletClient.sendTransaction({
+            to: '0x0000000000000000000000000000000000000022' as `0x${string}`,
+            data: pad(agentAddress as `0x${string}`, { size: 32 }),
+            chain: plumise,
+            account: this.chainService.account,
+          });
+          this.logger.debug(`Heartbeat piggybacked for ${agentAddress}: ${heartbeatTxHash}`);
+        } catch (hbError) {
+          this.logger.warn(`Heartbeat piggyback failed for ${agentAddress}: ${hbError instanceof Error ? hbError.message : 'Unknown'}`);
+        }
+      } else {
+        this.logger.debug(`Skipping heartbeat piggyback for idle agent ${agentAddress} (no tasks, no tokens)`);
       }
 
       await this.saveContributionToDB(agentAddress, currentEpoch, score);

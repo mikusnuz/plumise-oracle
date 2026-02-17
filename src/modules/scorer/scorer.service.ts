@@ -58,14 +58,20 @@ export class ScorerService {
     const EXPECTED_TASKS_PER_EPOCH = 100;
     const EPOCH_DURATION_SECONDS = 3600;
 
+    // Idle penalty: agents with no actual work (no tasks AND no tokens processed)
+    // get their uptime/response scores reduced to 10%.
+    // This prevents idle agents from earning disproportionate rewards just for being online.
+    const hasWork = taskCount > 0 || processedTokens > BigInt(0);
+    const IDLE_MULTIPLIER = hasWork ? 1.0 : 0.1;
+
     const taskScoreNormalized = Math.min(100, (taskCount / EXPECTED_TASKS_PER_EPOCH) * 100);
     const uptimeScoreNormalized = Math.min(100, (uptimeSeconds / EPOCH_DURATION_SECONDS) * 100);
     const responseScoreNormalized = Math.min(100, responseScore);
 
     return (
       (taskScoreNormalized * TASK_WEIGHT +
-        uptimeScoreNormalized * UPTIME_WEIGHT +
-        responseScoreNormalized * RESPONSE_WEIGHT) /
+        uptimeScoreNormalized * UPTIME_WEIGHT * IDLE_MULTIPLIER +
+        responseScoreNormalized * RESPONSE_WEIGHT * IDLE_MULTIPLIER) /
       100
     );
   }
@@ -124,7 +130,9 @@ export class ScorerService {
 
     const uptimeSeconds = this.agentUptimes.get(agentAddress) || 0;
 
-    let responseScore = 100;
+    // responseScore: 0 when no tasks (no work = no quality score),
+    // calculated from solve speed when tasks exist
+    let responseScore = 0;
     if (tasks.length > 0) {
       const totalSolveTime = tasks.reduce((sum, task) => sum + task.solveTime, 0);
       const avgSolveTime = totalSolveTime / tasks.length;
