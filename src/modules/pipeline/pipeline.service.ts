@@ -15,8 +15,6 @@ const HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 // Hardcoded model layer counts
 const MODEL_LAYERS: Record<string, number> = {
-  'openai/gpt-oss-20b': 24,
-  'ggml-org/gpt-oss-20b-GGUF': 24,
   'qwen/qwen3-32b': 64,
   'qwen/qwen3.5-397b-a17b': 96,
 };
@@ -356,7 +354,7 @@ export class PipelineService {
 
         // Check if node serves this model (capabilities contains model name or "inference")
         const servesModel = node.capabilities?.some(
-          cap => cap === model || cap === 'openai/gpt-oss-20b',
+          cap => cap === model,
         );
         if (!servesModel) continue;
 

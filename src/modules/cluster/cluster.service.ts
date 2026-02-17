@@ -10,19 +10,13 @@ import { randomBytes } from 'crypto';
 
 // Model memory requirements in MB (minimum RAM to load full model)
 const MODEL_MEMORY_REQUIREMENTS: Record<string, number> = {
-  'openai/gpt-oss-20b': 12_000,        // ~12GB Q4
-  'ggml-org/gpt-oss-20b-GGUF': 12_000,
-  'meta-llama/Llama-3.1-8B': 5_000,    // ~5GB Q4
-  'meta-llama/Llama-3.1-70B': 40_000,  // ~40GB Q4
-  'meta-llama/Llama-3.1-405B': 220_000, // ~220GB Q4
+  'qwen/qwen3-32b': 20_000,            // ~20GB Q4
+  'qwen/qwen3.5-397b-a17b': 220_000,   // ~220GB Q4
 };
 
 const MODEL_LAYERS: Record<string, number> = {
-  'openai/gpt-oss-20b': 24,
-  'ggml-org/gpt-oss-20b-GGUF': 24,
-  'meta-llama/Llama-3.1-8B': 32,
-  'meta-llama/Llama-3.1-70B': 80,
-  'meta-llama/Llama-3.1-405B': 126,
+  'qwen/qwen3-32b': 64,
+  'qwen/qwen3.5-397b-a17b': 96,
 };
 
 const HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000;

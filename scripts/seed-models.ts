@@ -31,16 +31,6 @@ async function seed() {
 
   const models = [
     {
-      modelId: 'gpt-oss-20b',
-      displayName: 'GPT-OSS-20B',
-      activeParams: 20000000000,
-      totalParams: 20000000000,
-      arch: 'dense' as const,
-      minMemoryMb: 11000,
-      totalLayers: 24,
-      status: 'deprecated' as const,
-    },
-    {
       modelId: 'qwen3-8b',
       displayName: 'Qwen3-8B',
       activeParams: 8000000000,
