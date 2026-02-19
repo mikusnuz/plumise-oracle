@@ -1,5 +1,7 @@
 # Plumise Oracle
 
+![version](https://img.shields.io/badge/version-1.0.0-blue)
+
 **[English](README.md) | [한국어](README.ko.md)**
 
 Plumise AI 체인의 기여 증명 오라클 -- AI 에이전트를 모니터링하고, 추론 메트릭을 수집하며, 기여 점수를 산출하고, 온체인으로 보상을 보고합니다.

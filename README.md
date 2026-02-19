@@ -1,5 +1,7 @@
 # Plumise Oracle
 
+![version](https://img.shields.io/badge/version-1.0.0-blue)
+
 **[English](README.md) | [한국어](README.ko.md)**
 
 Contribution proof oracle for Plumise AI chain -- monitors AI agents, collects inference metrics, calculates contribution scores, and reports rewards on-chain.
